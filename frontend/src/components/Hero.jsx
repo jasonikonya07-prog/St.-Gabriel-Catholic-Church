@@ -31,7 +31,7 @@ function Hero() {
         alt={`${settings.churchName} parish hero`}
         loading="eager"
         decoding="async"
-        fetchPriority="high"
+        fetchpriority="high"
         initial={false}
         animate={allowDecorativeMotion ? { scale: 1.08, x: -14, y: -8 } : { scale: 1.04, x: 0, y: 0 }}
         transition={

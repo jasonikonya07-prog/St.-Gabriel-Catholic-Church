@@ -7,7 +7,35 @@ const userTokenKey = "stGabrielUserToken";
 const userProfileKey = "stGabrielUserProfile";
 const userRememberKey = "stGabrielUserRemember";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const localApiBaseUrl = "http://localhost:5000/api";
+
+export const API_CONFIGURATION_MESSAGE =
+  "The backend API is not configured for this deployment. Set VITE_API_URL to your deployed backend API URL.";
+
+function normalizeApiBaseUrl(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function resolveApiBaseUrl() {
+  const configuredUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
+
+  if (configuredUrl) return configuredUrl;
+  if (import.meta.env.DEV) return localApiBaseUrl;
+
+  return "";
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+export const isApiConfigured = Boolean(API_BASE_URL);
+
+export function createApiConfigurationError() {
+  const error = new Error(API_CONFIGURATION_MESSAGE);
+  error.isApiConfigurationError = true;
+  error.status = 0;
+  return error;
+}
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -127,6 +155,7 @@ function cleanMessage(error, data, status) {
   const validationMessage = Array.isArray(details) && details.length ? details[0]?.message : "";
   const serverMessage = data?.message || data?.error || validationMessage;
 
+  if (error?.isApiConfigurationError) return API_CONFIGURATION_MESSAGE;
   if (serverMessage) return serverMessage;
   if (error?.code === "ECONNABORTED") return "The request took too long. Please try again.";
   if (!error?.response) return "The backend API is unavailable. Please confirm the server is running.";
@@ -148,6 +177,7 @@ export function normalizeApiError(error) {
     data,
     details,
     isForbidden: status === 403,
+    isApiConfigurationError: Boolean(error?.isApiConfigurationError),
     isMaintenance: status === 503,
     isNetworkError: !error?.response,
     isRateLimited: status === 429,
@@ -184,7 +214,7 @@ function handleUnauthorized(tokenScope) {
 
 export function createApiClient({ tokenScope = "admin" } = {}) {
   const client = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: API_BASE_URL || undefined,
     headers: {
       "Content-Type": "application/json",
     },
@@ -193,6 +223,10 @@ export function createApiClient({ tokenScope = "admin" } = {}) {
   });
 
   client.interceptors.request.use((config) => {
+    if (!isApiConfigured) {
+      return Promise.reject(createApiConfigurationError());
+    }
+
     const token = tokenForScope(config.tokenScope || tokenScope);
 
     if (token) {

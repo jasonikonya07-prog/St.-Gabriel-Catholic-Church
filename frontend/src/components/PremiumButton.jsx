@@ -3,7 +3,7 @@ import { FaCircleNotch } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { buttonReveal, viewportOnce } from "../utils/animations";
 
-const MotionLink = motion(Link);
+const MotionLink = motion.create(Link);
 const MotionAnchor = motion.a;
 
 const variants = {

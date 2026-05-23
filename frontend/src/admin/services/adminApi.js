@@ -1,6 +1,11 @@
 import axios from "axios";
 import { adminModules, defaultSettings, donationRecords } from "../data/adminData";
-import { API_BASE_URL } from "../../api/axios";
+import {
+  API_BASE_URL,
+  API_CONFIGURATION_MESSAGE,
+  createApiConfigurationError,
+  isApiConfigured,
+} from "../../api/axios";
 
 const adminTokenKey = "stGabrielAdminToken";
 const adminUserKey = "stGabrielAdminUser";
@@ -86,18 +91,23 @@ export function setAdminApiErrorHandler(handler) {
   globalErrorHandler = typeof handler === "function" ? handler : null;
 }
 
+function getDefaultApiErrorMessage(error) {
+  if (error?.isApiConfigurationError) return API_CONFIGURATION_MESSAGE;
+  if (error?.code === "ECONNABORTED") return "The server took too long to respond. Please try again.";
+  if (!error?.response) return "The admin API is unavailable. Please confirm the backend server is running.";
+
+  return "Something went wrong while communicating with the server.";
+}
+
 function normalizeApiError(error) {
-  const status = error?.response?.status || 0;
+  const status = error?.response?.status || error?.status || 0;
   const data = error?.response?.data || {};
-  const defaultMessage = error?.code === "ECONNABORTED"
-    ? "The server took too long to respond. Please try again."
-    : !error?.response
-      ? "The admin API is unavailable. Please confirm the backend server is running."
-      : "Something went wrong while communicating with the server.";
+  const defaultMessage = getDefaultApiErrorMessage(error);
   const message = data.message || data.error || defaultMessage || error?.message;
 
   return {
     data,
+    isApiConfigurationError: Boolean(error?.isApiConfigurationError),
     isNetworkError: !error?.response,
     message,
     originalError: error,
@@ -118,7 +128,7 @@ function handleApiError(error) {
 }
 
 export const adminHttp = axios.create({
-  baseURL: apiBaseUrl,
+  baseURL: apiBaseUrl || undefined,
   headers: {
     "Content-Type": "application/json",
   },
@@ -127,6 +137,10 @@ export const adminHttp = axios.create({
 
 adminHttp.interceptors.request.use(
   (config) => {
+    if (!isApiConfigured) {
+      return Promise.reject(createApiConfigurationError());
+    }
+
     const token = getToken();
 
     if (token) {
