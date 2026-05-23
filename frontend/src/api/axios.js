@@ -7,7 +7,9 @@ const userTokenKey = "stGabrielUserToken";
 const userProfileKey = "stGabrielUserProfile";
 const userRememberKey = "stGabrielUserRemember";
 
-const localApiBaseUrl = "http://localhost:5000/api";
+const localApiPort = "5000";
+const localApiPath = "/api";
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 
 export const API_CONFIGURATION_MESSAGE =
   "The backend API is not configured for this deployment. Set VITE_API_URL to your deployed backend API URL.";
@@ -18,13 +20,37 @@ function normalizeApiBaseUrl(value) {
     .replace(/\/+$/, "");
 }
 
+function isLoopbackHost(hostname) {
+  const normalized = String(hostname || "").toLowerCase();
+  return loopbackHosts.has(normalized) || normalized.startsWith("127.");
+}
+
+function isLoopbackApiUrl(url) {
+  try {
+    return isLoopbackHost(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackBrowser() {
+  if (typeof window === "undefined") return false;
+  return isLoopbackHost(window.location.hostname);
+}
+
+function getLocalApiBaseUrl() {
+  if (!isLoopbackBrowser()) return "";
+  return `http://${window.location.hostname}:${localApiPort}${localApiPath}`;
+}
+
 function resolveApiBaseUrl() {
   const configuredUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
-  if (configuredUrl) return configuredUrl;
-  if (import.meta.env.DEV) return localApiBaseUrl;
+  if (configuredUrl) {
+    return isLoopbackApiUrl(configuredUrl) && !isLoopbackBrowser() ? "" : configuredUrl;
+  }
 
-  return "";
+  return getLocalApiBaseUrl();
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
