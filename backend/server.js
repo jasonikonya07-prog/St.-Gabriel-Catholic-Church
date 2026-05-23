@@ -151,9 +151,11 @@ async function startServer() {
   });
 }
 
-startServer().catch((error) => {
-  console.error("Failed to start API server:", error);
-  process.exit(1);
-});
+if (process.env.VERCEL !== "1") {
+  startServer().catch((error) => {
+    console.error("Failed to start API server:", error);
+    process.exit(1);
+  });
+}
 
 export default app;
