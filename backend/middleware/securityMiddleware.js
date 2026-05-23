@@ -25,13 +25,29 @@ export function parseTrustProxy(value = process.env.TRUST_PROXY) {
   return value;
 }
 
-export function getAllowedOrigins() {
-  const configured = process.env.CORS_ORIGINS || process.env.CLIENT_URL || DEFAULT_LOCAL_ORIGINS.join(",");
+function normalizeAllowedOrigin(origin) {
+  const trimmed = String(origin || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
 
-  return configured
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed;
+  }
+}
+
+export function getAllowedOrigins() {
+  const configured = process.env.CORS_ORIGINS || process.env.CLIENT_URL || "";
+  const origins = configured
     .split(",")
-    .map((origin) => origin.trim())
+    .map(normalizeAllowedOrigin)
     .filter(Boolean);
+
+  if (!configured || process.env.NODE_ENV !== "production") {
+    origins.push(...DEFAULT_LOCAL_ORIGINS);
+  }
+
+  return [...new Set(origins)];
 }
 
 function getCookieSecret() {
