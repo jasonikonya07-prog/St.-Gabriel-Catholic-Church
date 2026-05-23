@@ -1,0 +1,42 @@
+{
+  "name": "st-gabriel-church-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Secure Express, MySQL, and Sequelize backend for St. Gabriel Catholic Church.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "seed:admin": "node seeders/seedAdmin.js",
+    "seed:settings": "node seeders/seedSettings.js",
+    "db:check": "node -e \"import('./config/database.js').then(async ({ testConnection }) => { await testConnection(); process.exit(0); }).catch((error) => { console.error(error); process.exit(1); })\""
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "express-rate-limit": "^7.5.1",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "mysql2": "^3.22.3",
+    "nanoid": "^5.1.11",
+    "nodemailer": "^6.10.1",
+    "sequelize": "^6.37.8",
+    "slugify": "^1.6.9",
+    "xss": "^1.0.15"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "sequelize-cli": "^6.6.5"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

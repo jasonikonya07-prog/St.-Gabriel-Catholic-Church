@@ -1,0 +1,544 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 92px;
+    overflow-x: hidden;
+  }
+
+  section[id] {
+    scroll-margin-top: 96px;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    overflow-x: hidden;
+    background: #f8f3e7;
+    color: #111827;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+
+  @media (max-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  ::selection {
+    background: rgba(201, 162, 39, 0.35);
+  }
+}
+
+@layer components {
+  .section-shell {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-padding {
+    @apply py-12 sm:py-16 lg:py-24;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-extrabold uppercase tracking-[0.16em] text-gold sm:text-xs sm:tracking-[0.22em];
+  }
+
+  .section-title {
+    @apply mt-3 break-words font-display text-3xl font-bold leading-tight text-navy md:text-4xl lg:text-[3.35rem];
+  }
+
+  .section-copy {
+    @apply mt-4 max-w-3xl text-base leading-7 text-warm md:text-lg md:leading-8;
+  }
+
+  .gold-rule {
+    @apply mt-6 h-px w-20 bg-gold;
+  }
+
+  .premium-field {
+    @apply grid min-w-0 gap-2 text-sm font-bold text-navy;
+  }
+
+  .premium-field-label {
+    @apply inline-flex origin-left items-center text-navy transition duration-300 ease-out;
+  }
+
+  .premium-field:focus-within .premium-field-label {
+    color: #c9a227;
+    transform: translateY(-2px);
+  }
+
+  .premium-input {
+    @apply w-full max-w-full rounded-xl border bg-white px-4 py-3 text-base font-medium text-ink outline-none transition duration-300 sm:text-sm;
+    border-color: rgba(7, 26, 45, 0.12);
+  }
+
+  .premium-input::placeholder {
+    color: rgba(107, 114, 128, 0.6);
+  }
+
+  .premium-input:focus {
+    border-color: #c9a227;
+    box-shadow: 0 0 0 4px rgba(201, 162, 39, 0.15), 0 18px 42px rgba(201, 162, 39, 0.08);
+  }
+
+  .premium-field:focus-within svg {
+    transform: translateY(-50%) scale(1.06);
+  }
+
+  .nav-link {
+    @apply text-sm font-semibold text-navy/80 transition hover:text-gold;
+  }
+
+  .premium-card {
+    @apply rounded-2xl border border-navy/10 bg-white shadow-soft;
+  }
+
+  .premium-hover-card {
+    @apply relative overflow-hidden transition-all duration-500 ease-out;
+  }
+
+  .premium-hover-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(115deg, transparent 0%, rgba(201, 162, 39, 0.08) 42%, rgba(255, 255, 255, 0.4) 50%, rgba(201, 162, 39, 0.08) 58%, transparent 100%);
+    opacity: 0;
+    transform: translateX(-120%);
+    transition: opacity 420ms ease, transform 900ms ease;
+  }
+
+  .premium-hover-card:hover {
+    border-color: rgba(201, 162, 39, 0.72);
+    box-shadow: 0 18px 46px rgba(7, 26, 45, 0.13), 0 0 0 1px rgba(201, 162, 39, 0.14);
+  }
+
+  .premium-hover-card:hover::before {
+    opacity: 1;
+    transform: translateX(120%);
+  }
+
+  .premium-hover-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .premium-hover-icon {
+    @apply transition duration-500 ease-out;
+  }
+
+  .premium-hover-card:hover .premium-hover-icon {
+    transform: scale(1.08);
+    box-shadow: 0 12px 26px rgba(201, 162, 39, 0.2);
+  }
+}
+
+@layer utilities {
+  @keyframes hero-gold-breathe {
+    0%,
+    100% {
+      opacity: 0.26;
+      transform: translate(-50%, -50%) scale(0.96);
+    }
+
+    50% {
+      opacity: 0.42;
+      transform: translate(-50%, -50%) scale(1.06);
+    }
+  }
+
+  @keyframes floating-particle-drift {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(0.86);
+    }
+
+    18% {
+      opacity: var(--particle-opacity);
+    }
+
+    72% {
+      opacity: var(--particle-opacity);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--particle-drift-x), var(--particle-drift-y), 0) scale(1.08);
+    }
+  }
+
+  @keyframes cross-soft-glow {
+    0%,
+    100% {
+      opacity: 0.2;
+    }
+
+    50% {
+      opacity: 0.32;
+    }
+  }
+
+  @keyframes button-shine-sweep {
+    0% {
+      transform: translateX(-140%) skewX(-18deg);
+    }
+
+    100% {
+      transform: translateX(180%) skewX(-18deg);
+    }
+  }
+
+  @keyframes church-light-rays-drift {
+    0%,
+    100% {
+      opacity: 0.44;
+      transform: translate3d(-1.5%, -1%, 0) rotate(-1deg) scale(1);
+    }
+
+    50% {
+      opacity: 0.62;
+      transform: translate3d(1.5%, 1%, 0) rotate(1.2deg) scale(1.04);
+    }
+  }
+
+  @keyframes church-light-orb-breathe {
+    0%,
+    100% {
+      opacity: 0.2;
+      transform: translate3d(0, 0, 0) scale(0.98);
+    }
+
+    50% {
+      opacity: 0.32;
+      transform: translate3d(-1.5rem, 1rem, 0) scale(1.06);
+    }
+  }
+
+  @keyframes maintenance-pulse-soft {
+    0%,
+    100% {
+      opacity: 0.82;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: 1;
+      transform: scale(1.18);
+    }
+  }
+
+  @keyframes maintenance-slide-progress {
+    0% {
+      transform: translateX(-120%);
+    }
+
+    100% {
+      transform: translateX(320%);
+    }
+  }
+
+  @keyframes maintenance-float-card {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+
+    50% {
+      transform: translate3d(0, -10px, 0);
+    }
+  }
+
+  .button-glow {
+    box-shadow: 0 12px 28px rgba(201, 162, 39, 0.18);
+  }
+
+  .button-glow:hover {
+    box-shadow: 0 16px 36px rgba(201, 162, 39, 0.26);
+  }
+
+  .animate-maintenance-pulse-soft {
+    animation: maintenance-pulse-soft 2.7s ease-in-out infinite;
+  }
+
+  .animate-maintenance-slide-progress {
+    animation: maintenance-slide-progress 2.6s ease-in-out infinite;
+  }
+
+  .animate-maintenance-float-card {
+    animation: maintenance-float-card 8s ease-in-out infinite;
+  }
+
+  .gold-line-pulse {
+    opacity: 0.86;
+    transform-origin: center;
+  }
+
+  .hero-gold-glow {
+    animation: hero-gold-breathe 9s ease-in-out infinite;
+  }
+
+  .church-light-rays {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .church-light-rays::before,
+  .church-light-rays::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .church-light-rays::before {
+    inset: -24% -12% auto -12%;
+    height: 72%;
+    background:
+      linear-gradient(104deg, transparent 9%, rgba(201, 162, 39, 0.09) 20%, transparent 33%),
+      linear-gradient(116deg, transparent 20%, rgba(248, 243, 231, 0.1) 35%, transparent 49%),
+      linear-gradient(128deg, transparent 43%, rgba(201, 162, 39, 0.08) 58%, transparent 72%);
+    opacity: 0.52;
+    transform-origin: top center;
+  }
+
+  .church-light-rays::after {
+    right: -10%;
+    top: -26%;
+    height: min(42rem, 72vw);
+    width: min(42rem, 72vw);
+    border-radius: 9999px;
+    background:
+      radial-gradient(circle at 35% 34%, rgba(248, 243, 231, 0.18), transparent 30%),
+      radial-gradient(circle at 50% 50%, rgba(201, 162, 39, 0.18), transparent 62%);
+    opacity: 0.28;
+  }
+
+  @media (prefers-reduced-motion: no-preference) and (min-width: 768px) {
+    .church-light-rays-animated::before {
+      animation: church-light-rays-drift 22s ease-in-out infinite;
+    }
+
+    .church-light-rays-animated::after {
+      animation: church-light-orb-breathe 18s ease-in-out infinite;
+    }
+  }
+
+  .church-light-rays-subtle::before {
+    opacity: 0.34;
+  }
+
+  .church-light-rays-subtle::after {
+    opacity: 0.18;
+  }
+
+  .catholic-pattern {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .catholic-pattern::before,
+  .catholic-pattern::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .catholic-pattern::before {
+    background-image:
+      linear-gradient(90deg, transparent 46%, rgba(201, 162, 39, 0.16) 46% 54%, transparent 54%),
+      linear-gradient(0deg, transparent 40%, rgba(201, 162, 39, 0.12) 40% 60%, transparent 60%),
+      linear-gradient(90deg, transparent 0 48%, rgba(201, 162, 39, 0.12) 48% 52%, transparent 52% 100%),
+      linear-gradient(0deg, transparent 0 49%, rgba(201, 162, 39, 0.08) 49% 51%, transparent 51% 100%);
+    background-position:
+      24px 28px,
+      24px 28px,
+      center,
+      center;
+    background-size:
+      96px 96px,
+      96px 96px,
+      100% 100%,
+      100% 100%;
+    opacity: 0.16;
+    mask-image: radial-gradient(circle at center, black 0%, black 52%, transparent 84%);
+  }
+
+  .catholic-pattern::after {
+    background:
+      radial-gradient(circle at 12% 18%, rgba(201, 162, 39, 0.18), transparent 22rem),
+      radial-gradient(circle at 84% 12%, rgba(248, 243, 231, 0.42), transparent 24rem),
+      radial-gradient(circle at 70% 82%, rgba(201, 162, 39, 0.12), transparent 20rem),
+      linear-gradient(135deg, transparent 10%, rgba(201, 162, 39, 0.08) 10% 11%, transparent 11% 34%, rgba(7, 26, 45, 0.05) 34% 35%, transparent 35%),
+      linear-gradient(115deg, rgba(201, 162, 39, 0.06), transparent 28%, rgba(7, 26, 45, 0.04) 54%, transparent 78%);
+    opacity: 0.72;
+  }
+
+  .catholic-pattern-dark::before {
+    background-image:
+      linear-gradient(90deg, transparent 46%, rgba(201, 162, 39, 0.2) 46% 54%, transparent 54%),
+      linear-gradient(0deg, transparent 40%, rgba(248, 243, 231, 0.12) 40% 60%, transparent 60%),
+      linear-gradient(90deg, transparent 0 48%, rgba(201, 162, 39, 0.13) 48% 52%, transparent 52% 100%),
+      linear-gradient(0deg, transparent 0 49%, rgba(248, 243, 231, 0.08) 49% 51%, transparent 51% 100%);
+    opacity: 0.13;
+  }
+
+  .catholic-pattern-dark::after {
+    background:
+      radial-gradient(circle at 15% 18%, rgba(201, 162, 39, 0.22), transparent 22rem),
+      radial-gradient(circle at 86% 14%, rgba(255, 255, 255, 0.08), transparent 24rem),
+      radial-gradient(circle at 70% 86%, rgba(201, 162, 39, 0.14), transparent 22rem),
+      linear-gradient(135deg, transparent 10%, rgba(201, 162, 39, 0.1) 10% 11%, transparent 11% 34%, rgba(248, 243, 231, 0.05) 34% 35%, transparent 35%),
+      linear-gradient(115deg, rgba(201, 162, 39, 0.08), transparent 30%, rgba(255, 255, 255, 0.04) 54%, transparent 78%);
+    opacity: 0.78;
+  }
+
+  .catholic-pattern-soft::before {
+    opacity: 0.11;
+  }
+
+  .catholic-pattern-soft::after {
+    opacity: 0.56;
+  }
+
+  .floating-particle {
+    position: absolute;
+    left: var(--particle-left);
+    top: var(--particle-top);
+    width: var(--particle-size);
+    height: var(--particle-size);
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(248, 243, 231, 0.95), rgba(201, 162, 39, 0.55) 42%, transparent 72%);
+    opacity: 0;
+    animation: floating-particle-drift var(--particle-duration) ease-in-out var(--particle-delay) infinite;
+    backface-visibility: hidden;
+    will-change: transform, opacity;
+  }
+
+  .cross-glow {
+    animation: cross-soft-glow 7s ease-in-out infinite;
+  }
+
+  .shine-button {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .shine-button::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 45%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+    opacity: 0;
+    transform: translateX(-140%) skewX(-18deg);
+    pointer-events: none;
+  }
+
+  .premium-action-button > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .shine-button:hover::after {
+    opacity: 1;
+    animation: button-shine-sweep 1.1s ease-out;
+  }
+
+  .shine-button:disabled:hover::after,
+  .shine-button[aria-disabled="true"]:hover::after {
+    opacity: 0;
+    animation: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.001ms !important;
+    }
+
+    html {
+      scroll-behavior: auto;
+    }
+
+    .button-glow,
+    .gold-line-pulse,
+    .hero-gold-glow,
+    .church-light-rays::before,
+    .church-light-rays::after,
+    .cross-glow,
+    .shine-button:hover::after {
+      animation: none;
+    }
+
+    .floating-particle {
+      animation: none;
+      opacity: 0.14;
+    }
+
+    .animate-maintenance-pulse-soft,
+    .animate-maintenance-slide-progress,
+    .animate-maintenance-float-card {
+      animation: none;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .gold-line-pulse,
+    .hero-gold-glow,
+    .hero-dust,
+    .church-light-rays::before,
+    .church-light-rays::after,
+    .cross-glow {
+      animation: none;
+    }
+
+    .floating-particles {
+      display: none;
+    }
+  }
+
+  @media (hover: none) {
+    .premium-hover-card::before,
+    .shine-button::after {
+      display: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .catholic-pattern::before {
+      background-size:
+        78px 78px,
+        78px 78px,
+        100% 100%,
+        100% 100%;
+      opacity: 0.1;
+    }
+
+    .catholic-pattern::after {
+      opacity: 0.48;
+    }
+  }
+}
