@@ -69,7 +69,13 @@ export async function maintenanceMiddleware(request, response, next) {
       success: false,
     });
   } catch (error) {
-    next(error instanceof ApiError ? error : new ApiError(503, "Website maintenance mode is active. Please try again later."));
+    if (error instanceof ApiError) {
+      next(error);
+      return;
+    }
+
+    console.error("Maintenance settings could not be loaded. Allowing the request to continue.", error);
+    next();
   }
 }
 
