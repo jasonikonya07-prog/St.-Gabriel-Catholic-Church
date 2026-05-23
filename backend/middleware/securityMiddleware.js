@@ -20,6 +20,7 @@ const suspiciousPatterns = [
 
 export function parseTrustProxy(value = process.env.TRUST_PROXY) {
   const normalized = String(value || "false").trim().toLowerCase();
+  if (!String(value || "").trim() && process.env.VERCEL === "1") return 1;
   if (["true", "1", "yes", "on"].includes(normalized)) return 1;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
   return value;
