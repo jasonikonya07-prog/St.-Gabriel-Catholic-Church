@@ -10,7 +10,8 @@
     "start": "node server.js",
     "seed:admin": "node seeders/seedAdmin.js",
     "seed:settings": "node seeders/seedSettings.js",
-    "db:check": "node -e \"import('./config/database.js').then(async ({ testConnection }) => { await testConnection(); process.exit(0); }).catch((error) => { console.error(error); process.exit(1); })\""
+    "db:check": "node -e \"import('./config/database.js').then(async ({ testConnection }) => { await testConnection(); process.exit(0); }).catch((error) => { console.error(error); process.exit(1); })\"",
+    "db:migrate": "node scripts/runMigrations.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

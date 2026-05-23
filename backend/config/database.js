@@ -1,29 +1,19 @@
 import dotenv from "dotenv";
 import mysql2 from "mysql2";
 import { Sequelize } from "sequelize";
+import { databaseConfig, getDatabaseSslConfig } from "./databaseConfig.js";
 
 dotenv.config();
 
 const isProduction = process.env.NODE_ENV === "production";
-
-const databaseConfig = {
-  database: process.env.DB_NAME || "st_gabriel_church",
-  host: process.env.DB_HOST || "localhost",
-  password: process.env.DB_PASSWORD || "",
-  port: Number(process.env.DB_PORT || 3306),
-  username: process.env.DB_USER || "root",
-};
-
-const sslEnabled = process.env.DB_SSL === "true";
+const sslConfig = getDatabaseSslConfig();
 
 const sequelize = new Sequelize(databaseConfig.database, databaseConfig.username, databaseConfig.password, {
   dialect: "mysql",
   dialectModule: mysql2,
-  dialectOptions: sslEnabled
+  dialectOptions: sslConfig
     ? {
-        ssl: {
-          rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
-        },
+        ssl: sslConfig,
       }
     : undefined,
   define: {
