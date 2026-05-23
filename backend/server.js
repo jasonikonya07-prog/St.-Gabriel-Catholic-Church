@@ -31,6 +31,7 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const apiPrefix = process.env.API_PREFIX || "/api";
+const netlifyFunctionPrefix = "/.netlify/functions/api";
 const isProduction = process.env.NODE_ENV === "production";
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || "100kb";
 
@@ -43,6 +44,14 @@ function attachRequestId(request, response, next) {
 }
 
 app.use(attachRequestId);
+
+app.use((request, response, next) => {
+  if (request.url.startsWith(netlifyFunctionPrefix)) {
+    request.url = request.url.replace(netlifyFunctionPrefix, apiPrefix);
+  }
+
+  next();
+});
 
 // 1. Basic security middleware.
 configureSecurityMiddleware(app, { bodyLimit: requestBodyLimit, includeBodyParsers: false });
@@ -151,7 +160,7 @@ async function startServer() {
   });
 }
 
-if (process.env.VERCEL !== "1") {
+if (process.env.VERCEL !== "1" && process.env.NETLIFY !== "true") {
   startServer().catch((error) => {
     console.error("Failed to start API server:", error);
     process.exit(1);
