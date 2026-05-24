@@ -9,6 +9,7 @@ import morgan from "morgan";
 import { nanoid } from "nanoid";
 import { connectDB } from "./config/db.js";
 import adminAuthRoutes from "./routes/adminAuthRoutes.js";
+import adminUserRoutes from "./routes/adminUserRoutes.js";
 import announcementRoutes from "./routes/announcementRoutes.js";
 import { auditLogRoutes, securityEventRoutes } from "./routes/auditRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -162,6 +163,7 @@ function mountApiRoutes(prefix) {
   app.get(apiPath(prefix, "/health"), healthCheck);
   app.use(apiPath(prefix, "/auth"), ensureDatabase, authRoutes);
   app.use(apiPath(prefix, "/admin-auth"), ensureDatabase, adminAuthRoutes);
+  app.use(apiPath(prefix, "/admin-users"), ensureDatabase, maintenanceMiddleware, adminUserRoutes);
   app.use(apiPath(prefix, "/user-auth"), ensureDatabase, maintenanceMiddleware, userAuthRoutes);
   app.use(apiPath(prefix, "/contact"), ensureDatabase, maintenanceMiddleware, contactRoutes);
   app.use(apiPath(prefix, "/prayers"), ensureDatabase, maintenanceMiddleware, prayerRoutes);
