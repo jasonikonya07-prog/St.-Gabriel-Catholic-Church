@@ -49,6 +49,11 @@ function getLocalApiBaseUrl() {
   return `http://${window.location.hostname}:${localApiPort}${localApiPath}`;
 }
 
+function getSameOriginApiBaseUrl() {
+  if (typeof window === "undefined") return "";
+  return localApiPath;
+}
+
 function resolveApiBaseUrl() {
   const configuredUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -56,7 +61,7 @@ function resolveApiBaseUrl() {
     return isLoopbackApiUrl(configuredUrl) && !isLoopbackBrowser() ? "" : configuredUrl;
   }
 
-  return getLocalApiBaseUrl();
+  return getLocalApiBaseUrl() || getSameOriginApiBaseUrl();
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
