@@ -1,8 +1,15 @@
 import ApiError from "../utils/ApiError.js";
-import { Admin, SiteSetting, User } from "../models/index.js";
+import { SiteSetting, User } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { resetFailedLogin } from "../utils/loginSecurity.js";
-import { clearRefreshTokenCookie, generateTokens, setRefreshTokenCookie } from "../utils/generateTokens.js";
+import {
+  checkAccountLocked,
+  logFailedLoginAttempt,
+  maxFailedLoginAttempts,
+  recordFailedLogin,
+  resetFailedLogin,
+  throwLockedAccount,
+} from "../utils/loginSecurity.js";
+import { clearRefreshTokenCookie, generateTokens, setRefreshTokenCookie } from "../utils/generateToken.js";
 import { logAudit, logSecurityEvent } from "../utils/securityLogger.js";
 
 function cleanString(value) {
@@ -21,7 +28,7 @@ function validatePassword(password) {
 }
 
 async function readSiteSetting() {
-  return SiteSetting.findByPk(1);
+  return SiteSetting.findOne({ id: "1" });
 }
 
 async function ensureUserLoginAllowed() {
@@ -39,6 +46,8 @@ async function ensureRegistrationAllowed() {
 }
 
 async function logFailedUserLogin({ email, reason, request, severity = "medium", user = null }) {
+  await logFailedLoginAttempt({ email, reason, request, scope: "user" });
+
   await logAudit({
     action: "user.login_failed",
     actorEmail: email,
@@ -65,50 +74,32 @@ async function logFailedUserLogin({ email, reason, request, severity = "medium",
   });
 }
 
-function mapAdminRoleToUserRole(role) {
-  return role === "editor" ? "editor" : "admin";
-}
-
-async function createUserFromAdmin(admin, request) {
-  if (!admin?.isActive) return null;
-
-  const user = await User.create({
-    email: admin.email,
-    fullName: admin.name,
-    isActive: true,
-    lastLogin: new Date(),
-    password: admin.password,
-    role: mapAdminRoleToUserRole(admin.role),
-  });
+async function logUserAccountLocked(user, request) {
+  const details = {
+    failedLoginAttempts: user.failedLoginAttempts,
+    lockUntil: user.lockUntil,
+    maxFailedLoginAttempts,
+    userId: user.id,
+  };
 
   await logAudit({
-    action: "user.synced_from_admin",
+    action: "user.account_locked",
     actorEmail: user.email,
     actorId: user.id,
     actorType: "user",
-    description: "Website user account was created from an existing admin login.",
-    details: {
-      adminId: admin.id,
-      userId: user.id,
-      userRole: user.role,
-    },
+    description: "Website user account locked after too many failed login attempts.",
+    details,
     module: "authentication",
     request,
   });
 
   await logSecurityEvent({
-    details: {
-      adminId: admin.id,
-      userId: user.id,
-      userRole: user.role,
-    },
+    details,
     email: user.email,
-    eventType: "user.synced_from_admin",
+    eventType: "user.account_locked",
     request,
-    severity: "medium",
+    severity: "high",
   });
-
-  return user;
 }
 
 export const register = asyncHandler(async (request, response) => {
@@ -124,7 +115,7 @@ export const register = asyncHandler(async (request, response) => {
   if (!email || !validateEmail(email)) throw new ApiError(400, "Please enter a valid email address.");
   if (passwordError) throw new ApiError(400, passwordError);
 
-  const existingUser = await User.findOne({ where: { email } });
+  const existingUser = await User.findOne({ email });
   if (existingUser) throw new ApiError(409, "An account with this email already exists.");
 
   const user = await User.create({ email, fullName, lastLogin: new Date(), password, phone });
@@ -168,19 +159,16 @@ export const login = asyncHandler(async (request, response) => {
   if (!email || !password) throw new ApiError(400, "Email and password are required.");
   if (!validateEmail(email)) throw new ApiError(400, "Please enter a valid email address.");
 
-  let user = await User.scope("withPassword").findOne({ where: { email } });
-
+  const user = await User.findOne({ email });
   if (!user) {
-    const admin = await Admin.scope("withPassword").findOne({ where: { email } });
+    await logFailedUserLogin({ email, reason: "unknown_user", request });
+    throw new ApiError(401, "Invalid user credentials.");
+  }
 
-    if (admin && (await admin.comparePassword(password))) {
-      user = await createUserFromAdmin(admin, request);
-    }
-
-    if (!user) {
-      await logFailedUserLogin({ email, reason: "unknown_user", request });
-      throw new ApiError(401, "Invalid user credentials.");
-    }
+  const lockState = await checkAccountLocked(user);
+  if (lockState.locked) {
+    await logFailedUserLogin({ email, reason: "user_locked", request, severity: "high", user });
+    throwLockedAccount(lockState);
   }
 
   if (!user.isActive) {
@@ -191,12 +179,25 @@ export const login = asyncHandler(async (request, response) => {
   const passwordMatches = await user.comparePassword(password);
 
   if (!passwordMatches) {
-    await logFailedUserLogin({ email, reason: "invalid_password", request, user });
-    throw new ApiError(401, "Invalid email or password.");
+    const failedLogin = await recordFailedLogin(user);
+    await logFailedUserLogin({
+      email,
+      reason: failedLogin.locked ? "invalid_password_account_locked" : "invalid_password",
+      request,
+      severity: failedLogin.locked ? "high" : "medium",
+      user,
+    });
+
+    if (failedLogin.locked) {
+      await logUserAccountLocked(user, request);
+      throw new ApiError(423, failedLogin.message);
+    }
+
+    throw new ApiError(401, failedLogin.message);
   }
 
   user.lastLogin = new Date();
-  await user.save({ fields: ["lastLogin"] });
+  await user.save();
   await resetFailedLogin(user);
 
   const { accessToken, refreshToken } = generateTokens(user, "user");

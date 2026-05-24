@@ -1,84 +1,98 @@
-import { DataTypes } from "sequelize";
+import mongoose from "mongoose";
+import { configureMongoSchema, objectIdStringDefault, optionalObjectId } from "../utils/mongooseModel.js";
+
+const { Schema } = mongoose;
+const urlRegex = /^https?:\/\/\S+$/i;
 
 export const announcementCategories = ["Important", "Mass Update", "Youth", "Charity", "Parish News"];
 
-export default function defineAnnouncement(sequelize) {
-  return sequelize.define(
-    "Announcement",
-    {
-      id: {
-        autoIncrement: true,
-        primaryKey: true,
-        type: DataTypes.INTEGER.UNSIGNED,
-      },
-      title: {
-        allowNull: false,
-        type: DataTypes.STRING(180),
-        validate: {
-          notEmpty: true,
-        },
-      },
-      slug: {
-        allowNull: false,
-        type: DataTypes.STRING(220),
-        unique: true,
-        validate: {
-          notEmpty: true,
-        },
-      },
-      category: {
-        allowNull: false,
-        defaultValue: "Parish News",
-        type: DataTypes.ENUM(...announcementCategories),
-      },
-      summary: {
-        allowNull: false,
-        type: DataTypes.STRING(500),
-        validate: {
-          notEmpty: true,
-        },
-      },
-      content: {
-        allowNull: false,
-        type: DataTypes.TEXT,
-        validate: {
-          notEmpty: true,
-        },
-      },
-      imageUrl: {
-        allowNull: true,
-        type: DataTypes.STRING(500),
-      },
-      isPublished: {
-        allowNull: false,
-        defaultValue: false,
-        type: DataTypes.BOOLEAN,
-      },
-      publishedAt: {
-        allowNull: true,
-        type: DataTypes.DATE,
-      },
-      createdBy: {
-        allowNull: true,
-        type: DataTypes.UUID,
-        references: {
-          key: "id",
-          model: "admins",
-        },
-        onDelete: "SET NULL",
-        onUpdate: "CASCADE",
+const adminReference = {
+  default: null,
+  ref: "Admin",
+  set: optionalObjectId,
+  type: Schema.Types.ObjectId,
+};
+
+const announcementSchema = new Schema(
+  {
+    id: {
+      default: objectIdStringDefault,
+      immutable: true,
+      required: true,
+      type: String,
+      unique: true,
+    },
+    category: {
+      default: "Parish News",
+      enum: announcementCategories,
+      index: true,
+      required: true,
+      type: String,
+    },
+    content: {
+      minlength: [20, "Announcement content must be at least 20 characters."],
+      required: [true, "Announcement content is required."],
+      trim: true,
+      type: String,
+    },
+    createdBy: adminReference,
+    imageUrl: {
+      default: null,
+      maxlength: [500, "Image URL must be 500 characters or fewer."],
+      trim: true,
+      type: String,
+      validate: {
+        message: "Image URL must be a valid URL.",
+        validator: (value) => !value || urlRegex.test(value),
       },
     },
-    {
-      indexes: [
-        { fields: ["slug"], unique: true },
-        { fields: ["category"] },
-        { fields: ["isPublished"] },
-        { fields: ["publishedAt"] },
-        { fields: ["createdBy"] },
-      ],
-      tableName: "announcements",
-      timestamps: true,
+    isPublished: {
+      default: false,
+      index: true,
+      type: Boolean,
     },
-  );
-}
+    publishedAt: {
+      default: null,
+      index: true,
+      type: Date,
+    },
+    slug: {
+      lowercase: true,
+      maxlength: [220, "Slug must be 220 characters or fewer."],
+      required: [true, "Slug is required."],
+      trim: true,
+      type: String,
+      unique: true,
+    },
+    summary: {
+      maxlength: [500, "Summary must be 500 characters or fewer."],
+      minlength: [10, "Summary must be at least 10 characters."],
+      required: [true, "Announcement summary is required."],
+      trim: true,
+      type: String,
+    },
+    title: {
+      maxlength: [180, "Title must be 180 characters or fewer."],
+      minlength: [3, "Title must be at least 3 characters."],
+      required: [true, "Announcement title is required."],
+      trim: true,
+      type: String,
+    },
+    updatedBy: adminReference,
+  },
+  {
+    collection: "announcements",
+    timestamps: true,
+  },
+);
+
+announcementSchema.index({ isPublished: 1, publishedAt: -1 });
+announcementSchema.index({ category: 1, isPublished: 1 });
+announcementSchema.index({ createdBy: 1, createdAt: -1 });
+announcementSchema.index({ title: "text", summary: "text", content: "text" });
+
+configureMongoSchema(announcementSchema);
+
+const Announcement = mongoose.models.Announcement || mongoose.model("Announcement", announcementSchema);
+
+export default Announcement;

@@ -9,7 +9,7 @@ const sensitiveKeys = new Set([
   "password",
   "refreshToken",
   "token",
-]);
+].map((key) => key.toLowerCase()));
 
 function isSensitiveKey(key) {
   return sensitiveKeys.has(String(key || "").toLowerCase());
@@ -45,6 +45,48 @@ function stringifyDetails(details) {
   }
 }
 
+function cleanString(value, maxLength = 160) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function inferActorType({ actorType = "", email = "", eventType = "", request = null } = {}) {
+  const explicit = cleanString(actorType, 40).toLowerCase();
+  if (["admin", "user", "system", "public"].includes(explicit)) return explicit;
+
+  if (request?.admin) return "admin";
+  if (request?.user) return "user";
+
+  const type = cleanString(eventType, 120).toLowerCase();
+  if (type.startsWith("admin.")) return "admin";
+  if (type.startsWith("user.")) return "user";
+
+  return email ? "public" : "system";
+}
+
+function inferActorId({ actorId = null, actorType = "", request = null } = {}) {
+  if (actorId) return String(actorId);
+  if (actorType === "admin" && request?.admin?.id) return String(request.admin.id);
+  if (actorType === "user" && request?.user?.id) return String(request.user.id);
+  return null;
+}
+
+function inferModule(module = "", eventType = "") {
+  const explicit = cleanString(module, 80);
+  if (explicit) return explicit;
+
+  const prefix = cleanString(eventType, 120).split(".")[0];
+  const modules = {
+    admin: "authentication",
+    auth: "authentication",
+    button: "settings",
+    maintenance: "settings",
+    settings: "settings",
+    user: "authentication",
+  };
+
+  return modules[prefix] || "security";
+}
+
 export function getClientIp(request) {
   const forwardedFor = String(request?.headers?.["x-forwarded-for"] || "")
     .split(",")
@@ -58,15 +100,30 @@ export function getUserAgent(request) {
   return String(request?.headers?.["user-agent"] || "").slice(0, 500);
 }
 
-export async function logSecurityEvent({ details = {}, email = null, eventType, request = null, severity = "low" }) {
+export async function logSecurityEvent({
+  actorId = null,
+  actorType = "",
+  details = {},
+  email = null,
+  eventType,
+  module = "",
+  request = null,
+  severity = "low",
+}) {
   if (!eventType) return;
 
   try {
+    const normalizedEmail = email ? cleanString(email, 160).toLowerCase() : null;
+    const normalizedActorType = inferActorType({ actorType, email: normalizedEmail, eventType, request });
+
     await SecurityEvent.create({
+      actorId: inferActorId({ actorId, actorType: normalizedActorType, request }),
+      actorType: normalizedActorType,
       details: sanitizeDetails(details),
-      email: email ? String(email).trim().toLowerCase() : null,
+      email: normalizedEmail,
       eventType,
       ipAddress: getClientIp(request) || null,
+      module: inferModule(module, eventType),
       severity,
       userAgent: getUserAgent(request) || null,
     });
@@ -90,9 +147,11 @@ export async function logAudit({
   if (!action) return;
 
   try {
+    const normalizedActorEmail = actorEmail ? cleanString(actorEmail, 160).toLowerCase() : null;
+
     await AuditLog.create({
       action,
-      actorEmail,
+      actorEmail: normalizedActorEmail,
       actorId: actorId ? String(actorId) : null,
       actorType,
       description,

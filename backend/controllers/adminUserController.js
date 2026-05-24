@@ -1,6 +1,6 @@
-import { Op } from "sequelize";
+import { Op } from "../utils/mongoQuery.js";
 import ApiError from "../utils/ApiError.js";
-import { Admin, User, sequelize } from "../models/index.js";
+import { Admin, User } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getPagination } from "../utils/pagination.js";
 import { logAudit, logSecurityEvent } from "../utils/securityLogger.js";
@@ -73,9 +73,8 @@ function serializeUser(user, adminByEmail = new Map()) {
   };
 }
 
-async function syncAdminAccessForUser(user, role, transaction, request) {
+async function syncAdminAccessForUser(user, role, request) {
   const existingAdmin = await Admin.scope("withPassword").findOne({
-    transaction,
     where: { email: user.email },
   });
 
@@ -95,25 +94,22 @@ async function syncAdminAccessForUser(user, role, transaction, request) {
         password: user.password,
         role: existingAdmin.role === "super_admin" ? "super_admin" : role,
       });
-      await existingAdmin.save({ fields: ["isActive", "name", "password", "role"], transaction });
+      await existingAdmin.save({ fields: ["isActive", "name", "password", "role"] });
       return existingAdmin;
     }
 
-    return Admin.create(
-      {
-        email: user.email,
-        isActive: Boolean(user.isActive),
-        name: user.fullName,
-        password: user.password,
-        role,
-      },
-      { transaction },
-    );
+    return Admin.create({
+      email: user.email,
+      isActive: Boolean(user.isActive),
+      name: user.fullName,
+      password: user.password,
+      role,
+    });
   }
 
   if (existingAdmin && existingAdmin.role !== "super_admin") {
     existingAdmin.isActive = false;
-    await existingAdmin.save({ fields: ["isActive"], transaction });
+    await existingAdmin.save({ fields: ["isActive"] });
     return existingAdmin;
   }
 
@@ -170,28 +166,25 @@ export const updateUser = asyncHandler(async (request, response) => {
     throw new ApiError(400, "No user updates were provided.");
   }
 
-  const result = await sequelize.transaction(async (transaction) => {
-    const user = await User.scope("withPassword").findByPk(userId, { transaction });
+  const user = await User.scope("withPassword").findByPk(userId);
 
-    if (!user) throw new ApiError(404, "User not found.");
+  if (!user) throw new ApiError(404, "User not found.");
 
-    const previous = {
-      emailVerified: user.emailVerified,
-      isActive: user.isActive,
-      role: user.role,
-    };
+  const previous = {
+    emailVerified: user.emailVerified,
+    isActive: user.isActive,
+    role: user.role,
+  };
 
-    user.set(patch);
-    await user.save({ fields: Object.keys(patch), transaction });
+  user.set(patch);
+  await user.save({ fields: Object.keys(patch) });
 
-    const adminAccess = await syncAdminAccessForUser(user, user.role, transaction, request);
-
-    return {
-      adminAccess,
-      previous,
-      user,
-    };
-  });
+  const adminAccess = await syncAdminAccessForUser(user, user.role, request);
+  const result = {
+    adminAccess,
+    previous,
+    user,
+  };
 
   const adminByEmail = new Map();
   if (result.adminAccess) {

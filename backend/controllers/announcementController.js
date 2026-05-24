@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op } from "../utils/mongoQuery.js";
 import slugify from "slugify";
 import ApiError from "../utils/ApiError.js";
 import { Announcement } from "../models/index.js";

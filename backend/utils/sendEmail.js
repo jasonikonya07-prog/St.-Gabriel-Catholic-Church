@@ -4,7 +4,7 @@ let transporter;
 
 function emailConfig() {
   return {
-    from: process.env.EMAIL_FROM || process.env.MAIL_FROM || "St. Gabriel Catholic Church <no-reply@stgabriel.org>",
+    from: process.env.EMAIL_FROM || process.env.MAIL_FROM || "St. Gabriel Church <no-reply@stgabriel.org>",
     host: process.env.EMAIL_HOST || process.env.SMTP_HOST,
     pass: process.env.EMAIL_PASS || process.env.SMTP_PASS,
     port: Number(process.env.EMAIL_PORT || process.env.SMTP_PORT || 587),
@@ -50,7 +50,7 @@ function formatKes(amount) {
   return `KSh ${Number(amount || 0).toLocaleString("en-KE")}`;
 }
 
-function renderEmailTemplate({ children, eyebrow = "St. Gabriel Catholic Church", title }) {
+function renderEmailTemplate({ children, eyebrow = "St. Gabriel Church", title }) {
   const year = new Date().getFullYear();
 
   return `
@@ -83,9 +83,9 @@ function renderEmailTemplate({ children, eyebrow = "St. Gabriel Catholic Church"
                 </tr>
                 <tr>
                   <td style="background:#071A2D;padding:22px 32px;color:#D1D5DB;font-size:13px;line-height:1.6;">
-                    <p style="margin:0 0 6px;color:#FFFFFF;font-weight:700;">St. Gabriel Catholic Church</p>
+                    <p style="margin:0 0 6px;color:#FFFFFF;font-weight:700;">St. Gabriel Church</p>
                     <p style="margin:0;">Growing together in faith, worship, and service.</p>
-                    <p style="margin:12px 0 0;color:#C9A227;">© ${year} St. Gabriel Catholic Church. All rights reserved.</p>
+                    <p style="margin:12px 0 0;color:#C9A227;">© ${year} St. Gabriel Church. All rights reserved.</p>
                   </td>
                 </tr>
               </table>
@@ -188,7 +188,7 @@ export async function sendNewsletterWelcomeEmail(subscriber) {
       <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Dear ${escapeHtml(
         subscriber.fullName || "Friend",
       )},</p>
-      <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Thank you for subscribing to parish updates from St. Gabriel Catholic Church.</p>
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Thank you for subscribing to parish updates from St. Gabriel Church.</p>
       <p style="margin:0;font-size:16px;line-height:1.7;">We will share parish announcements, events, and community news with care and respect.</p>
     `,
     title: "Welcome to Parish Updates",
@@ -196,8 +196,8 @@ export async function sendNewsletterWelcomeEmail(subscriber) {
 
   return sendEmail({
     html,
-    subject: "Welcome to St. Gabriel Catholic Church updates",
-    text: `Dear ${subscriber.fullName || "Friend"},\n\nThank you for subscribing to St. Gabriel Catholic Church updates.\n\nMay God bless you.`,
+    subject: "Welcome to St. Gabriel Church updates",
+    text: `Dear ${subscriber.fullName || "Friend"},\n\nThank you for subscribing to St. Gabriel Church updates.\n\nMay God bless you.`,
     to: subscriber.email,
   });
 }
@@ -223,7 +223,7 @@ export async function sendDonationConfirmationEmail(donation) {
 
   return sendEmail({
     html,
-    subject: "Donation received - St. Gabriel Catholic Church",
+    subject: "Donation received - St. Gabriel Church",
     text: `Dear ${donation.donorName},\n\nYour offering has been received.\nAmount: ${formatKes(donation.amount)}\nPurpose: ${
       donation.purpose
     }\nReference: ${donation.transactionCode}\n\nMay God bless your generosity.`,

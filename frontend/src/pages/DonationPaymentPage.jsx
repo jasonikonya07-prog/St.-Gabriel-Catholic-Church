@@ -45,7 +45,7 @@ const paymentMethods = [
   },
 ];
 
-const completedMessage = "Thank you for supporting St. Gabriel Catholic Church. Your offering has been received.";
+const completedMessage = "Thank you for supporting St. Gabriel Church. Your offering has been received.";
 
 function getPaymentMethod(methodId) {
   return paymentMethods.find((method) => method.id === methodId) || paymentMethods[0];

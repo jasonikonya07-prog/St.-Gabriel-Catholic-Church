@@ -5,7 +5,7 @@ import { cardHover, cardReveal, fadeUp, sectionReveal, viewportOnce } from "../u
 const stories = [
   {
     name: "Agnes W.",
-    message: "St. Gabriel Catholic Church has helped my family grow deeper in faith and community.",
+    message: "St. Gabriel Church has helped my family grow deeper in faith and community.",
   },
   {
     name: "Joseph K.",

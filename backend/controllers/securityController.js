@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op } from "../utils/mongoQuery.js";
 import { Admin, AuditLog, FailedLoginAttempt } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getPagination } from "../utils/pagination.js";

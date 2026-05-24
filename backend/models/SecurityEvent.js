@@ -1,68 +1,106 @@
-import { DataTypes } from "sequelize";
+import mongoose from "mongoose";
+import { configureMongoSchema, objectIdStringDefault, optionalObjectId } from "../utils/mongooseModel.js";
 
-export default function defineSecurityEvent(sequelize) {
-  return sequelize.define(
-    "SecurityEvent",
-    {
-      id: {
-        autoIncrement: true,
-        primaryKey: true,
-        type: DataTypes.BIGINT.UNSIGNED,
-      },
-      eventType: {
-        allowNull: false,
-        type: DataTypes.STRING(120),
-        validate: {
-          notEmpty: true,
-        },
-      },
-      email: {
-        allowNull: true,
-        set(value) {
-          const email = String(value || "").trim().toLowerCase();
-          this.setDataValue("email", email || null);
-        },
-        type: DataTypes.STRING(160),
-        validate: {
-          isEmail: true,
-        },
-      },
-      ipAddress: {
-        allowNull: true,
-        type: DataTypes.STRING(64),
-      },
-      userAgent: {
-        allowNull: true,
-        type: DataTypes.STRING(500),
-      },
-      details: {
-        allowNull: true,
-        type: DataTypes.JSON,
-      },
-      severity: {
-        allowNull: false,
-        defaultValue: "low",
-        type: DataTypes.ENUM("low", "medium", "high", "critical"),
-        validate: {
-          isIn: {
-            args: [["low", "medium", "high", "critical"]],
-            msg: "Security event severity is not supported.",
-          },
-        },
-      },
+const { Schema } = mongoose;
+
+export const securitySeverities = ["low", "medium", "high", "critical"];
+export const securityActorTypes = ["admin", "user", "system", "public"];
+
+const adminReference = {
+  default: null,
+  ref: "Admin",
+  set: optionalObjectId,
+  type: Schema.Types.ObjectId,
+};
+
+const securityEventSchema = new Schema(
+  {
+    id: {
+      default: objectIdStringDefault,
+      immutable: true,
+      required: true,
+      type: String,
+      unique: true,
     },
-    {
-      createdAt: "createdAt",
-      indexes: [
-        { fields: ["eventType"] },
-        { fields: ["email"] },
-        { fields: ["ipAddress"] },
-        { fields: ["severity"] },
-        { fields: ["createdAt"] },
-      ],
-      tableName: "security_events",
-      timestamps: true,
-      updatedAt: false,
+    createdBy: adminReference,
+    actorId: {
+      default: null,
+      index: true,
+      maxlength: [80, "Actor ID must be 80 characters or fewer."],
+      trim: true,
+      type: String,
     },
-  );
-}
+    actorType: {
+      default: "system",
+      enum: securityActorTypes,
+      index: true,
+      required: true,
+      type: String,
+    },
+    details: {
+      default: null,
+      type: Schema.Types.Mixed,
+    },
+    email: {
+      default: null,
+      index: true,
+      lowercase: true,
+      maxlength: [160, "Email must be 160 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+    eventType: {
+      index: true,
+      maxlength: [120, "Event type must be 120 characters or fewer."],
+      required: [true, "Event type is required."],
+      trim: true,
+      type: String,
+    },
+    ipAddress: {
+      default: null,
+      index: true,
+      maxlength: [64, "IP address must be 64 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+    module: {
+      default: "security",
+      index: true,
+      maxlength: [80, "Security event module must be 80 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+    severity: {
+      default: "low",
+      enum: securitySeverities,
+      index: true,
+      required: true,
+      type: String,
+    },
+    updatedBy: adminReference,
+    userAgent: {
+      default: null,
+      maxlength: [500, "User agent must be 500 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+  },
+  {
+    collection: "security_events",
+    timestamps: true,
+  },
+);
+
+securityEventSchema.index({ eventType: 1, createdAt: -1 });
+securityEventSchema.index({ email: 1, createdAt: -1 });
+securityEventSchema.index({ ipAddress: 1, createdAt: -1 });
+securityEventSchema.index({ module: 1, createdAt: -1 });
+securityEventSchema.index({ actorType: 1, actorId: 1, createdAt: -1 });
+securityEventSchema.index({ severity: 1, createdAt: -1 });
+securityEventSchema.index({ createdAt: -1 });
+
+configureMongoSchema(securityEventSchema);
+
+const SecurityEvent = mongoose.models.SecurityEvent || mongoose.model("SecurityEvent", securityEventSchema);
+
+export default SecurityEvent;

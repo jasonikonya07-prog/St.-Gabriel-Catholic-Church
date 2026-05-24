@@ -1,37 +1,37 @@
 import dotenv from "dotenv";
-import { Admin, sequelize } from "../models/index.js";
+import { connectDB, disconnectDB } from "../config/db.js";
+import Admin from "../models/Admin.js";
 
 dotenv.config();
 
-function getRequiredEnv(...names) {
-  const foundName = names.find((name) => String(process.env[name] || "").trim());
-  const value = foundName ? String(process.env[foundName] || "").trim() : "";
+function getRequiredEnv(name) {
+  const value = String(process.env[name] || "").trim();
 
   if (!value) {
-    throw new Error(`${names.join(" or ")} is required in backend/.env before running npm run seed:admin.`);
+    throw new Error(`${name} is required in backend/.env before running npm run seed:admin.`);
   }
 
   return value;
 }
 
 async function seedAdmin() {
+  const name = getRequiredEnv("ADMIN_NAME");
+  const email = getRequiredEnv("ADMIN_EMAIL").toLowerCase();
+  const password = getRequiredEnv("ADMIN_PASSWORD");
+
   try {
-    await sequelize.authenticate();
-    await Admin.sync();
+    await connectDB();
 
-    const name = getRequiredEnv("ADMIN_NAME", "ADMIN_SEED_NAME");
-    const email = getRequiredEnv("ADMIN_EMAIL", "ADMIN_SEED_EMAIL").toLowerCase();
-    const password = getRequiredEnv("ADMIN_PASSWORD", "ADMIN_SEED_PASSWORD");
-
-    const existingAdmin = await Admin.findOne({ where: { email } });
+    const existingAdmin = await Admin.findOne({}).select("email");
 
     if (existingAdmin) {
-      console.log(`Admin already exists: ${email}`);
+      console.log(`Admin already exists: ${existingAdmin.email}`);
       return;
     }
 
     await Admin.create({
       email,
+      isActive: true,
       name,
       password,
       role: "super_admin",
@@ -39,7 +39,7 @@ async function seedAdmin() {
 
     console.log(`Admin created successfully: ${email}`);
   } finally {
-    await sequelize.close();
+    await disconnectDB();
   }
 }
 

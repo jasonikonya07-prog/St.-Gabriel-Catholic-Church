@@ -1,121 +1,102 @@
-import bcrypt from "bcryptjs";
-import { DataTypes } from "sequelize";
+import mongoose from "mongoose";
+import { configureMongoSchema, objectIdStringDefault, optionalObjectId } from "../utils/mongooseModel.js";
 
-const passwordHashRegex = /^\$2[aby]\$\d{2}\$/;
+const { Schema } = mongoose;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const userRoles = ["user", "admin", "editor"];
 
-export default function defineUser(sequelize) {
-  const User = sequelize.define(
-    "User",
-    {
-      id: {
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true,
-        type: DataTypes.UUID,
-      },
-      fullName: {
-        allowNull: false,
-        type: DataTypes.STRING(120),
-        validate: {
-          notEmpty: { msg: "Full name is required." },
-          len: { args: [2, 120], msg: "Full name must be between 2 and 120 characters." },
-        },
-      },
-      email: {
-        allowNull: false,
-        set(value) {
-          this.setDataValue("email", String(value || "").trim().toLowerCase());
-        },
-        type: DataTypes.STRING(160),
-        unique: true,
-        validate: {
-          isEmail: { msg: "Email must be valid." },
-          notEmpty: { msg: "Email is required." },
-        },
-      },
-      phone: {
-        allowNull: true,
-        type: DataTypes.STRING(40),
-        validate: {
-          len: { args: [0, 40], msg: "Phone must be 40 characters or fewer." },
-        },
-      },
-      password: {
-        allowNull: false,
-        type: DataTypes.STRING(255),
-        validate: {
-          len: { args: [8, 255], msg: "Password must be at least 8 characters." },
-          notEmpty: { msg: "Password is required." },
-        },
-      },
-      role: {
-        allowNull: false,
-        defaultValue: "user",
-        type: DataTypes.ENUM("user", "admin", "editor"),
-      },
-      isActive: {
-        allowNull: false,
-        defaultValue: true,
-        type: DataTypes.BOOLEAN,
-      },
-      emailVerified: {
-        allowNull: false,
-        defaultValue: false,
-        type: DataTypes.BOOLEAN,
-      },
-      lastLogin: {
-        allowNull: true,
-        type: DataTypes.DATE,
-      },
-      failedLoginAttempts: {
-        allowNull: false,
-        defaultValue: 0,
-        type: DataTypes.INTEGER.UNSIGNED,
-      },
-      lockUntil: {
-        allowNull: true,
-        type: DataTypes.DATE,
+const adminReference = {
+  default: null,
+  ref: "Admin",
+  set: optionalObjectId,
+  type: Schema.Types.ObjectId,
+};
+
+const userSchema = new Schema(
+  {
+    id: {
+      default: objectIdStringDefault,
+      immutable: true,
+      required: true,
+      type: String,
+      unique: true,
+    },
+    createdBy: adminReference,
+    email: {
+      lowercase: true,
+      maxlength: [160, "Email must be 160 characters or fewer."],
+      required: [true, "Email is required."],
+      trim: true,
+      type: String,
+      unique: true,
+      validate: {
+        message: "Please enter a valid email address.",
+        validator: (value) => emailRegex.test(String(value || "")),
       },
     },
-    {
-      defaultScope: {
-        attributes: { exclude: ["password"] },
-      },
-      hooks: {
-        beforeSave: async (user) => {
-          if (!user.changed("password")) return;
-          if (passwordHashRegex.test(String(user.password || ""))) return;
-
-          const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
-          user.password = await bcrypt.hash(user.password, saltRounds);
-        },
-      },
-      indexes: [
-        { fields: ["email"], unique: true },
-        { fields: ["role"] },
-        { fields: ["isActive"] },
-        { fields: ["lockUntil"] },
-        { fields: ["createdAt"] },
-      ],
-      scopes: {
-        withPassword: {
-          attributes: { include: ["password"] },
-        },
-      },
-      tableName: "users",
-      timestamps: true,
+    emailVerified: {
+      default: false,
+      type: Boolean,
     },
-  );
+    failedLoginAttempts: {
+      default: 0,
+      min: [0, "Failed login attempts cannot be negative."],
+      type: Number,
+    },
+    fullName: {
+      maxlength: [120, "Full name must be 120 characters or fewer."],
+      minlength: [2, "Full name must be at least 2 characters."],
+      required: [true, "Full name is required."],
+      trim: true,
+      type: String,
+    },
+    isActive: {
+      default: true,
+      index: true,
+      type: Boolean,
+    },
+    lastLogin: {
+      default: null,
+      type: Date,
+    },
+    lockUntil: {
+      default: null,
+      index: true,
+      type: Date,
+    },
+    password: {
+      maxlength: [255, "Password is too long."],
+      minlength: [8, "Password must be at least 8 characters."],
+      required: [true, "Password is required."],
+      type: String,
+    },
+    phone: {
+      default: null,
+      maxlength: [40, "Phone number must be 40 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+    role: {
+      default: "user",
+      enum: userRoles,
+      index: true,
+      required: true,
+      type: String,
+    },
+    updatedBy: adminReference,
+  },
+  {
+    collection: "users",
+    timestamps: true,
+  },
+);
 
-  User.prototype.comparePassword = function comparePassword(candidatePassword) {
-    if (!this.password) return false;
-    return bcrypt.compare(String(candidatePassword || ""), this.password);
-  };
+userSchema.index({ role: 1, isActive: 1 });
+userSchema.index({ createdAt: -1 });
 
-  User.prototype.toJSON = function toJSON() {
-    const values = { ...this.get() };
-    delete values.password;
-    return values;
-  };
+configureMongoSchema(userSchema, { hashPassword: true });
 
-  return User;
-}
+const User = mongoose.models.User || mongoose.model("User", userSchema);
+
+export { userRoles };
+export default User;

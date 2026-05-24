@@ -58,7 +58,7 @@ function Leadership() {
           <h2 className="section-title">Meet Our Parish Leaders</h2>
           <div className="gold-rule mx-auto" />
           <p className="section-copy mx-auto">
-            Dedicated leaders serving St. Gabriel Catholic Church through prayer, care, formation, and faithful ministry.
+            Dedicated leaders serving St. Gabriel Church through prayer, care, formation, and faithful ministry.
           </p>
         </motion.div>
 

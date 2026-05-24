@@ -10,14 +10,20 @@ const userRememberKey = "stGabrielUserRemember";
 const localApiPort = "5000";
 const localApiPath = "/api";
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+let activeApiRequests = 0;
 
 export const API_CONFIGURATION_MESSAGE =
-  "The backend API is not configured for this deployment. Set VITE_API_URL to your deployed backend API URL.";
+  "The backend API is not configured for this deployment. Set VITE_API_URL to your deployed backend API URL ending in /api.";
 
 function normalizeApiBaseUrl(value) {
-  return String(value || "")
+  const trimmed = String(value || "")
     .trim()
     .replace(/\/+$/, "");
+
+  if (!trimmed) return "";
+  if (/\/api(?:\/|$)/.test(trimmed)) return trimmed;
+
+  return `${trimmed}${localApiPath}`;
 }
 
 function isLoopbackHost(hostname) {
@@ -179,6 +185,7 @@ export function clearUserSession() {
 function cleanMessage(error, data, status) {
   const details = data?.details || error?.details || [];
   const validationMessage = Array.isArray(details) && details.length ? details[0]?.message : "";
+  const maintenance = data?.maintenance || data?.data?.maintenance || null;
   const serverMessage = data?.message || data?.error || validationMessage;
 
   if (error?.isApiConfigurationError) return API_CONFIGURATION_MESSAGE;
@@ -188,7 +195,8 @@ function cleanMessage(error, data, status) {
   if (status === 401) return "Please sign in again to continue.";
   if (status === 403) return "You do not have permission to perform this action.";
   if (status === 429) return "Too many requests. Please wait a moment and try again.";
-  if (status === 503) return "The website is temporarily unavailable for maintenance.";
+  if (status === 503 && maintenance) return maintenance.message || maintenance.maintenanceMessage || "The website is temporarily unavailable for maintenance.";
+  if (status === 503) return "The backend service is temporarily unavailable. Please try again shortly.";
 
   return "Something went wrong. Please try again.";
 }
@@ -197,16 +205,19 @@ export function normalizeApiError(error) {
   const status = error?.response?.status || error?.status || 0;
   const data = error?.response?.data || error?.data || {};
   const details = data.details || error?.details || [];
-  const maintenance = data.maintenance || null;
+  const maintenance = data.maintenance || data?.data?.maintenance || null;
+  const isMaintenance = status === 503 && Boolean(maintenance || data.status === "maintenance");
 
   return {
     data,
     details,
+    isAccountLocked: status === 423,
     isForbidden: status === 403,
     isApiConfigurationError: Boolean(error?.isApiConfigurationError),
-    isMaintenance: status === 503,
-    isNetworkError: !error?.response,
+    isMaintenance,
+    isNetworkError: !error?.response && !error?.isApiConfigurationError,
     isRateLimited: status === 429,
+    isServiceUnavailable: status === 503,
     isUnauthorized: status === 401,
     maintenance,
     message: cleanMessage(error, data, status),
@@ -218,7 +229,45 @@ export function normalizeApiError(error) {
 
 function emitApiError(normalizedError) {
   if (typeof window === "undefined") return;
+
+  if (normalizedError.isMaintenance && normalizedError.maintenance) {
+    window.dispatchEvent(new CustomEvent("st-gabriel:maintenance", { detail: normalizedError.maintenance }));
+  }
+
   window.dispatchEvent(new CustomEvent("st-gabriel:api-error", { detail: normalizedError }));
+}
+
+function emitApiLoadingState() {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent("st-gabriel:api-loading", {
+      detail: {
+        activeRequests: activeApiRequests,
+        isLoading: activeApiRequests > 0,
+      },
+    }),
+  );
+}
+
+function startApiRequest(config) {
+  if (config.trackLoading === false) return config;
+
+  activeApiRequests += 1;
+  config.metadata = {
+    ...(config.metadata || {}),
+    tracksLoading: true,
+  };
+  emitApiLoadingState();
+
+  return config;
+}
+
+function finishApiRequest(config) {
+  if (!config?.metadata?.tracksLoading) return;
+
+  activeApiRequests = Math.max(activeApiRequests - 1, 0);
+  emitApiLoadingState();
 }
 
 function tokenForScope(tokenScope) {
@@ -259,12 +308,16 @@ export function createApiClient({ tokenScope = "admin" } = {}) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    return config;
+    return startApiRequest(config);
   });
 
   client.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      finishApiRequest(response.config);
+      return response;
+    },
     (error) => {
+      finishApiRequest(error?.config);
       const normalizedError = normalizeApiError(error);
 
       if (normalizedError.status === 401) {

@@ -8,7 +8,7 @@ import {
   updateDonationStatus,
   verifyDonation,
 } from "../controllers/donationController.js";
-import { authenticate, authorize, protectUser } from "../middleware/authMiddleware.js";
+import { authenticate, authorize, optionalAuth } from "../middleware/authMiddleware.js";
 import { requireButtonEnabled } from "../middleware/buttonControlMiddleware.js";
 import { validateDonation, validateDonationStatus } from "../middleware/validateMiddleware.js";
 import mpesaRoutes from "./mpesaRoutes.js";
@@ -17,7 +17,7 @@ const router = Router();
 const financeAccess = authorize("super admin", "admin", "finance");
 
 router.use("/mpesa", mpesaRoutes);
-router.post("/", requireButtonEnabled("donate_now"), protectUser, validateDonation, createDonation);
+router.post("/", requireButtonEnabled("donate_now"), optionalAuth, validateDonation, createDonation);
 router.get("/verify/:transactionCode", verifyDonation);
 router.get("/", authenticate, financeAccess, listDonations);
 router.get("/stats", authenticate, financeAccess, donationStats);

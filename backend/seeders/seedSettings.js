@@ -1,24 +1,17 @@
 import dotenv from "dotenv";
-import { Admin, ButtonControl, SiteSetting, WebsiteSetting, sequelize } from "../models/index.js";
+import { connectDB, disconnectDB } from "../config/db.js";
+import ButtonControl from "../models/ButtonControl.js";
+import SiteSetting from "../models/SiteSetting.js";
 
 dotenv.config();
 
-const websiteDefaults = {
-  churchName: "St. Gabriel Catholic Church",
-  email: "office@stgabrielparish.org",
-  heroSubtitle: "Join us as we grow together in Christ through prayer, service, and love.",
-  heroTitle: "Faith, Worship, Community, and Hope",
-  homepageContactEnabled: true,
-  homepageDisabledReason: "This action is temporarily unavailable.",
-  homepageDonateEnabled: true,
-  homepageMassTimesEnabled: true,
-  homepageNewsletterEnabled: true,
-  homepagePrayerEnabled: true,
-  maintenanceEnabled: false,
+const siteSettingDefaults = {
+  allowRegistration: true,
+  allowUserLogin: true,
+  id: "1",
   maintenanceMessage: "We are currently improving our website. Please check back soon.",
+  maintenanceMode: false,
   maintenanceTitle: "Website Under Maintenance",
-  metaDescription: "St. Gabriel Catholic Church is a welcoming Catholic parish community.",
-  websiteTitle: "St. Gabriel Catholic Church",
 };
 
 const buttonDefaults = [
@@ -31,41 +24,36 @@ const buttonDefaults = [
 
 async function seedSettings() {
   try {
-    await sequelize.authenticate();
-    await Admin.sync();
-    await Promise.all([SiteSetting.sync(), ButtonControl.sync(), WebsiteSetting.sync()]);
+    await connectDB();
 
-    await SiteSetting.upsert({
-      allowRegistration: true,
-      allowUserLogin: true,
-      id: 1,
-      maintenanceMessage: "We are currently improving our website. Please check back soon.",
-      maintenanceMode: false,
-      maintenanceTitle: "Website Under Maintenance",
-    });
+    const existingSettings = await SiteSetting.findOne({});
+
+    if (existingSettings) {
+      console.log("Site settings already exist.");
+    } else {
+      await SiteSetting.create(siteSettingDefaults);
+      console.log("Default site settings created.");
+    }
 
     await Promise.all(
-      buttonDefaults.map((button) =>
-        ButtonControl.upsert({
+      buttonDefaults.map(async (button) => {
+        const existingButton = await ButtonControl.findOne({ buttonKey: button.buttonKey });
+
+        if (existingButton) {
+          return existingButton;
+        }
+
+        return ButtonControl.create({
           ...button,
           disabledReason: null,
           isEnabled: true,
-        }),
-      ),
+        });
+      }),
     );
 
-    await Promise.all(
-      Object.entries(websiteDefaults).map(([settingKey, value]) =>
-        WebsiteSetting.upsert({
-          settingKey,
-          settingValue: JSON.stringify(value),
-        }),
-      ),
-    );
-
-    console.log("Website security and content settings seeded successfully.");
+    console.log("Default button controls are ready.");
   } finally {
-    await sequelize.close();
+    await disconnectDB();
   }
 }
 

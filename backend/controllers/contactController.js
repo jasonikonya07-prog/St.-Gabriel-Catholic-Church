@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op } from "../utils/mongoQuery.js";
 import ApiError from "../utils/ApiError.js";
 import { ContactMessage } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";

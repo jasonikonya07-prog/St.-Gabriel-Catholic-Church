@@ -41,7 +41,7 @@ function UserRegisterPage() {
           <p className="eyebrow">Parish account</p>
           <h1 className="mt-2 break-words font-display text-3xl font-bold text-navy md:text-4xl">Create Account</h1>
           <p className="mt-3 text-sm font-semibold leading-7 text-warm">
-            Create a secure St. Gabriel Catholic Church account.
+            Create a secure St. Gabriel Church account.
           </p>
 
           <PremiumField className="mt-7" label="Full Name" name="fullName" value={form.fullName} onChange={updateField} icon={FaUserAlt} required />

@@ -7,11 +7,21 @@ function isMaintenanceEnabled(settings) {
   return Boolean(settings?.maintenanceMode || settings?.maintenanceEnabled);
 }
 
+function normalizeMaintenanceSettings(maintenance = {}) {
+  return {
+    maintenanceEnabled: Boolean(maintenance.maintenanceMode ?? maintenance.enabled),
+    maintenanceExpectedBack: maintenance.maintenanceExpectedBack ?? maintenance.expectedBack ?? null,
+    maintenanceMessage: maintenance.maintenanceMessage ?? maintenance.message ?? defaultSiteSettings.maintenanceMessage,
+    maintenanceMode: Boolean(maintenance.maintenanceMode ?? maintenance.enabled),
+    maintenanceTitle: maintenance.maintenanceTitle ?? maintenance.title ?? defaultSiteSettings.maintenanceTitle,
+  };
+}
+
 function MaintenanceLoading() {
   return (
     <section className="grid min-h-screen place-items-center bg-navy px-4 text-center text-white">
       <div className="rounded-lg border border-gold/25 bg-white/10 px-7 py-6 shadow-premium backdrop-blur">
-        <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-gold">St. Gabriel Catholic Church</p>
+        <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-gold">St. Gabriel Church</p>
         <p className="mt-3 font-display text-3xl font-bold text-cream">Checking website status...</p>
       </div>
     </section>
@@ -67,6 +77,21 @@ function MaintenanceGuard({ children }) {
 
     window.addEventListener("st-gabriel:settings-updated", handleSettingsUpdated);
     return () => window.removeEventListener("st-gabriel:settings-updated", handleSettingsUpdated);
+  }, []);
+
+  useEffect(() => {
+    const handleMaintenance = (event) => {
+      setState((current) => ({
+        isLoading: false,
+        settings: {
+          ...current.settings,
+          ...normalizeMaintenanceSettings(event.detail || {}),
+        },
+      }));
+    };
+
+    window.addEventListener("st-gabriel:maintenance", handleMaintenance);
+    return () => window.removeEventListener("st-gabriel:maintenance", handleMaintenance);
   }, []);
 
   const maintenanceActive = useMemo(() => isMaintenanceEnabled(state.settings), [state.settings]);

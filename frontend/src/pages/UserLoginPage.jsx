@@ -41,7 +41,7 @@ function UserLoginPage() {
           <p className="eyebrow">Parish account</p>
           <h1 className="mt-2 break-words font-display text-3xl font-bold text-navy md:text-4xl">User Login</h1>
           <p className="mt-3 text-sm font-semibold leading-7 text-warm">
-            Sign in to view your St. Gabriel Catholic Church profile.
+            Sign in to view your St. Gabriel Church profile.
           </p>
 
           <PremiumField className="mt-7" label="Email Address" name="email" type="email" value={form.email} onChange={updateField} icon={FaEnvelope} required />

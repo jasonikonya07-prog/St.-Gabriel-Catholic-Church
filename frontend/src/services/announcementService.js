@@ -1,29 +1,29 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "../api/axios";
+import { adminDelete, adminGet, adminPatch, adminPost, publicGet } from "../api/axios";
 
 export function getPublishedAnnouncements(params = {}) {
-  return apiGet("/announcements", { params });
+  return publicGet("/announcements", { params });
 }
 
 export function getAnnouncementBySlug(slug) {
-  return apiGet(`/announcements/${slug}`);
+  return publicGet(`/announcements/${slug}`);
 }
 
 export function getAllAnnouncements(params = {}) {
-  return apiGet("/announcements/admin/all", { params });
+  return adminGet("/announcements/admin/all", { params });
 }
 
 export function createAnnouncement(payload) {
-  return apiPost("/announcements", payload);
+  return adminPost("/announcements", payload);
 }
 
 export function updateAnnouncement(id, payload) {
-  return apiPatch(`/announcements/${id}`, payload);
+  return adminPatch(`/announcements/${id}`, payload);
 }
 
 export function publishAnnouncement(id, isPublished) {
-  return apiPatch(`/announcements/${id}/publish`, { isPublished });
+  return adminPatch(`/announcements/${id}/publish`, { isPublished });
 }
 
 export function deleteAnnouncement(id) {
-  return apiDelete(`/announcements/${id}`);
+  return adminDelete(`/announcements/${id}`);
 }

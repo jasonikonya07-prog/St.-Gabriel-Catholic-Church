@@ -1,7 +1,7 @@
-import { adminDelete, adminGet, publicPost, userPost } from "../api/axios";
+import { adminDelete, adminGet, publicPost } from "../api/axios";
 
 export function subscribeToNewsletter(payload) {
-  return userPost("/newsletter/subscribe", {
+  return publicPost("/newsletter/subscribe", {
     email: payload.email || payload.newsletterEmail,
     fullName: payload.fullName || payload.name || undefined,
     source: payload.source || "website",

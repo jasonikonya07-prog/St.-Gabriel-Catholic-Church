@@ -179,7 +179,7 @@ export const donationColumns = [
 ];
 
 export const defaultSettings = {
-  churchName: "St. Gabriel Catholic Church",
+  churchName: "St. Gabriel Church",
   parishEmail: "office@stgabrielparish.org",
   parishPhone: "(555) 284-1912",
   address: "125 Grace Avenue, Brookfield, NY 10021",

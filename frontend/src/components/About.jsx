@@ -84,7 +84,7 @@ function About() {
           <h2 className="section-title">About Our Parish</h2>
           <div className="gold-rule" />
           <p className="section-copy">
-            St. Gabriel Catholic Church is a welcoming Catholic community dedicated to worship, prayer, sacraments, charity, and service. We gather as one family of faith to grow closer to Christ and serve our community with love.
+            St. Gabriel Church is a welcoming Catholic community dedicated to worship, prayer, sacraments, charity, and service. We gather as one family of faith to grow closer to Christ and serve our community with love.
           </p>
 
           <div className="mt-9 grid gap-4 sm:grid-cols-2">

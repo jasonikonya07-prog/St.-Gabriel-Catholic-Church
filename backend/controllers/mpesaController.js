@@ -37,7 +37,7 @@ async function makeUniqueTransactionCode() {
   let transactionCode = base;
   let counter = 2;
 
-  while (await Donation.findOne({ where: { transactionCode } })) {
+  while (await Donation.exists({ transactionCode })) {
     transactionCode = `${base}-${counter}`;
     counter += 1;
   }
@@ -120,7 +120,7 @@ export const handleMpesaCallback = asyncHandler(async (request, response) => {
     throw new ApiError(400, "Invalid M-Pesa callback payload.");
   }
 
-  const donation = await Donation.findOne({ where: { checkoutRequestId: callback.checkoutRequestId } });
+  const donation = await Donation.findOne({ checkoutRequestId: callback.checkoutRequestId });
 
   if (!donation) {
     console.warn("M-Pesa callback donation not found:", {
@@ -174,7 +174,7 @@ export const getMpesaStatus = asyncHandler(async (request, response) => {
     throw new ApiError(400, "Checkout request ID is required.");
   }
 
-  const donation = await Donation.findOne({ where: { checkoutRequestId } });
+  const donation = await Donation.findOne({ checkoutRequestId });
 
   if (!donation) {
     throw new ApiError(404, "Payment request was not found.");

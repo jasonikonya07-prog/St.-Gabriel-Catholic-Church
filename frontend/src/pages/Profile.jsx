@@ -84,7 +84,7 @@ function Profile() {
           <p className="mt-7 break-words text-xs font-extrabold uppercase tracking-[0.16em] text-gold sm:tracking-[0.24em]">My Parish Profile</p>
           <h1 className="mt-4 break-words font-display text-4xl font-bold leading-tight text-cream sm:text-5xl lg:text-6xl">{user?.fullName || "Parish Member"}</h1>
           <p className="mt-6 max-w-lg text-base font-semibold leading-8 text-cream/78">
-            Your secure St. Gabriel Catholic Church website account.
+            Your secure St. Gabriel Church website account.
           </p>
         </motion.div>
 

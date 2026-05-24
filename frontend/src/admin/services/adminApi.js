@@ -1,16 +1,14 @@
-import axios from "axios";
 import { adminModules, defaultSettings, donationRecords } from "../data/adminData";
 import {
-  API_BASE_URL,
-  API_CONFIGURATION_MESSAGE,
-  createApiConfigurationError,
-  isApiConfigured,
+  adminApiClient,
+  clearAdminSession,
+  getAdminToken,
+  getStoredAdmin,
+  removeAdminToken,
+  removeStoredAdmin,
+  setAdminToken,
+  setStoredAdmin,
 } from "../../api/axios";
-
-const adminTokenKey = "stGabrielAdminToken";
-const adminUserKey = "stGabrielAdminUser";
-const legacySessionKey = "stGabrielAdminSession";
-const apiBaseUrl = API_BASE_URL;
 
 let globalErrorHandler = null;
 
@@ -19,158 +17,54 @@ function canUseStorage() {
 }
 
 export function getToken() {
-  if (!canUseStorage()) return null;
-
-  try {
-    return localStorage.getItem(adminTokenKey);
-  } catch {
-    return null;
-  }
+  return getAdminToken() || null;
 }
 
 export function setToken(token) {
-  if (!token) return removeToken();
-  if (!canUseStorage()) return;
-
-  try {
-    localStorage.setItem(adminTokenKey, token);
-  } catch {
-    // Storage can fail in private browsing; the route guard will ask for login again.
-  }
+  setAdminToken(token);
 }
 
 export function removeToken() {
-  if (!canUseStorage()) return;
-
-  try {
-    localStorage.removeItem(adminTokenKey);
-  } catch {
-    // Ignore storage cleanup failures.
-  }
+  removeAdminToken();
 }
 
 export function getAdmin() {
-  if (!canUseStorage()) return null;
-
-  try {
-    return JSON.parse(localStorage.getItem(adminUserKey) || localStorage.getItem(legacySessionKey) || "null");
-  } catch {
-    return null;
-  }
+  return getStoredAdmin();
 }
 
 export function setAdmin(admin) {
-  if (!admin) return removeAdmin();
-  if (!canUseStorage()) return;
-
-  try {
-    localStorage.setItem(adminUserKey, JSON.stringify(admin));
-    localStorage.setItem(legacySessionKey, JSON.stringify(admin));
-  } catch {
-    // Ignore storage persistence failures.
-  }
+  setStoredAdmin(admin);
 }
 
 export function removeAdmin() {
-  if (!canUseStorage()) return;
-
-  try {
-    localStorage.removeItem(adminUserKey);
-    localStorage.removeItem(legacySessionKey);
-  } catch {
-    // Ignore storage cleanup failures.
-  }
+  removeStoredAdmin();
 }
 
 export function logoutAdmin() {
-  removeToken();
-  removeAdmin();
+  clearAdminSession();
 }
 
 export function setAdminApiErrorHandler(handler) {
   globalErrorHandler = typeof handler === "function" ? handler : null;
 }
 
-function getDefaultApiErrorMessage(error) {
-  if (error?.isApiConfigurationError) return API_CONFIGURATION_MESSAGE;
-  if (error?.code === "ECONNABORTED") return "The server took too long to respond. Please try again.";
-  if (!error?.response) return "The admin API is unavailable. Please confirm the backend server is running.";
+export const adminHttp = adminApiClient;
 
-  return "Something went wrong while communicating with the server.";
-}
-
-function normalizeApiError(error) {
-  const status = error?.response?.status || error?.status || 0;
-  const data = error?.response?.data || {};
-  const defaultMessage = getDefaultApiErrorMessage(error);
-  const message = data.message || data.error || defaultMessage || error?.message;
-
-  return {
-    data,
-    isApiConfigurationError: Boolean(error?.isApiConfigurationError),
-    isNetworkError: !error?.response,
-    message,
-    originalError: error,
-    status,
-  };
-}
-
-function handleApiError(error) {
-  const normalizedError = normalizeApiError(error);
-
-  if (normalizedError.status === 401) {
-    logoutAdmin();
+async function readAdminData(request) {
+  try {
+    const { data } = await request;
+    return data;
+  } catch (error) {
+    globalErrorHandler?.(error);
+    throw error;
   }
-
-  globalErrorHandler?.(normalizedError);
-
-  return Promise.reject(normalizedError);
 }
-
-export const adminHttp = axios.create({
-  baseURL: apiBaseUrl || undefined,
-  headers: {
-    "Content-Type": "application/json",
-  },
-  timeout: 30000,
-});
-
-adminHttp.interceptors.request.use(
-  (config) => {
-    if (!isApiConfigured) {
-      return Promise.reject(createApiConfigurationError());
-    }
-
-    const token = getToken();
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return config;
-  },
-  (error) => Promise.reject(normalizeApiError(error)),
-);
-
-adminHttp.interceptors.response.use((response) => response, handleApiError);
 
 export const adminApi = {
-  delete: async (url, config) => {
-    const { data } = await adminHttp.delete(url, config);
-    return data;
-  },
-  get: async (url, config) => {
-    const { data } = await adminHttp.get(url, config);
-    return data;
-  },
-  patch: async (url, payload, config) => {
-    const { data } = await adminHttp.patch(url, payload, config);
-    return data;
-  },
-  post: async (url, payload, config) => {
-    const { data } = await adminHttp.post(url, payload, config);
-    return data;
-  },
+  delete: (url, config) => readAdminData(adminHttp.delete(url, config)),
+  get: (url, config) => readAdminData(adminHttp.get(url, config)),
+  patch: (url, payload, config) => readAdminData(adminHttp.patch(url, payload, config)),
+  post: (url, payload, config) => readAdminData(adminHttp.post(url, payload, config)),
 };
 
 const storagePrefix = "stGabrielAdmin";

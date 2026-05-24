@@ -1,4 +1,4 @@
-import { signAccessToken, verifyAccessToken } from "./generateTokens.js";
+import { signAccessToken, verifyAccessToken } from "./generateToken.js";
 
 export function signToken(payload) {
   return signAccessToken(payload, payload.tokenType || "admin");

@@ -1,23 +1,23 @@
-import { DataTypes } from "sequelize";
+import { createMongoModel } from "../utils/mongooseModel.js";
 
-export default function defineWebsiteSetting(sequelize) {
-  return sequelize.define(
-    "WebsiteSetting",
-    {
-      settingKey: {
-        allowNull: false,
-        primaryKey: true,
-        type: DataTypes.STRING(80),
-      },
-      settingValue: {
-        allowNull: true,
-        type: DataTypes.TEXT,
-      },
+const WebsiteSetting = createMongoModel(
+  "WebsiteSetting",
+  {
+    settingKey: {
+      maxlength: 80,
+      required: true,
+      trim: true,
+      type: String,
+      unique: true,
     },
-    {
-      indexes: [{ fields: ["settingKey"], unique: true }],
-      tableName: "website_settings",
-      timestamps: true,
+    settingValue: {
+      default: null,
+      type: String,
     },
-  );
-}
+  },
+  {
+    collection: "website_settings",
+  },
+);
+
+export default WebsiteSetting;

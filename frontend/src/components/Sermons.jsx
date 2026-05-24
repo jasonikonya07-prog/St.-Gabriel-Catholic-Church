@@ -4,7 +4,7 @@ import { cardHover, cardReveal, fadeUp, sectionReveal, viewportOnce } from "../u
 import FloatingParticles from "./FloatingParticles";
 import PremiumButton from "./PremiumButton";
 
-const liveMassUrl = "https://www.youtube.com/results?search_query=St+Gabriel+Catholic+Church+live+Mass";
+const liveMassUrl = "https://www.youtube.com/results?search_query=St+Gabriel+Church+live+Mass";
 
 const sermons = [
   {

@@ -1,58 +1,67 @@
-import { DataTypes } from "sequelize";
+import mongoose from "mongoose";
+import { configureMongoSchema, optionalObjectId } from "../utils/mongooseModel.js";
 
-export default function defineSiteSetting(sequelize) {
-  return sequelize.define(
-    "SiteSetting",
-    {
-      id: {
-        allowNull: false,
-        defaultValue: 1,
-        primaryKey: true,
-        type: DataTypes.TINYINT.UNSIGNED,
-        validate: {
-          isIn: [[1]],
-        },
-      },
-      maintenanceMode: {
-        allowNull: false,
-        defaultValue: false,
-        type: DataTypes.BOOLEAN,
-      },
-      maintenanceTitle: {
-        allowNull: false,
-        defaultValue: "Website temporarily unavailable",
-        type: DataTypes.STRING(180),
-        validate: {
-          notEmpty: { msg: "Maintenance title is required." },
-          len: { args: [3, 180], msg: "Maintenance title must be 180 characters or fewer." },
-        },
-      },
-      maintenanceMessage: {
-        allowNull: false,
-        defaultValue: "We are making a few updates. Please check back soon.",
-        type: DataTypes.TEXT,
-        validate: {
-          notEmpty: { msg: "Maintenance message is required." },
-        },
-      },
-      maintenanceExpectedBack: {
-        allowNull: true,
-        type: DataTypes.DATE,
-      },
-      allowUserLogin: {
-        allowNull: false,
-        defaultValue: true,
-        type: DataTypes.BOOLEAN,
-      },
-      allowRegistration: {
-        allowNull: false,
-        defaultValue: true,
-        type: DataTypes.BOOLEAN,
-      },
+const { Schema } = mongoose;
+
+const adminReference = {
+  default: null,
+  ref: "Admin",
+  set: optionalObjectId,
+  type: Schema.Types.ObjectId,
+};
+
+const siteSettingSchema = new Schema(
+  {
+    id: {
+      default: "1",
+      immutable: true,
+      required: true,
+      type: String,
+      unique: true,
     },
-    {
-      tableName: "site_settings",
-      timestamps: true,
+    allowRegistration: {
+      default: true,
+      type: Boolean,
     },
-  );
-}
+    allowUserLogin: {
+      default: true,
+      type: Boolean,
+    },
+    createdBy: adminReference,
+    maintenanceExpectedBack: {
+      default: null,
+      type: Date,
+    },
+    maintenanceMessage: {
+      default: "We are making a few updates. Please check back soon.",
+      maxlength: [1000, "Maintenance message must be 1000 characters or fewer."],
+      required: [true, "Maintenance message is required."],
+      trim: true,
+      type: String,
+    },
+    maintenanceMode: {
+      default: false,
+      index: true,
+      type: Boolean,
+    },
+    maintenanceTitle: {
+      default: "Website temporarily unavailable",
+      maxlength: [180, "Maintenance title must be 180 characters or fewer."],
+      minlength: [3, "Maintenance title must be at least 3 characters."],
+      required: [true, "Maintenance title is required."],
+      trim: true,
+      type: String,
+    },
+    updatedBy: adminReference,
+  },
+  {
+    collection: "site_settings",
+    timestamps: true,
+  },
+);
+
+configureMongoSchema(siteSettingSchema);
+
+const SiteSetting = mongoose.models.SiteSetting || mongoose.model("SiteSetting", siteSettingSchema);
+
+export default SiteSetting;

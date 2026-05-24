@@ -49,9 +49,9 @@ function formatDateTime(value) {
 }
 
 function buildMailto(message) {
-  const subject = encodeURIComponent(`Re: ${message?.subject || "Message to St. Gabriel Catholic Church"}`);
+  const subject = encodeURIComponent(`Re: ${message?.subject || "Message to St. Gabriel Church"}`);
   const body = encodeURIComponent(
-    `Hello ${message?.sender || message?.name || ""},\n\nThank you for contacting St. Gabriel Catholic Church.\n\n`,
+    `Hello ${message?.sender || message?.name || ""},\n\nThank you for contacting St. Gabriel Church.\n\n`,
   );
 
   return `mailto:${message?.email || ""}?subject=${subject}&body=${body}`;

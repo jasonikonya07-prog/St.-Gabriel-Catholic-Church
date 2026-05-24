@@ -1,1 +1,1 @@
-# St.-Gabriel-Catholic-Church
+# St. Gabriel Church

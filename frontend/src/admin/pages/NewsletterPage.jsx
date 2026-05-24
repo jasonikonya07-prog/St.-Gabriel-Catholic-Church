@@ -53,7 +53,7 @@ function buildComposeHref(subscribers) {
     .filter((subscriber) => subscriber.status === "subscribed" && subscriber.email)
     .map((subscriber) => subscriber.email)
     .join(",");
-  const subject = encodeURIComponent("St. Gabriel Catholic Church Newsletter");
+  const subject = encodeURIComponent("St. Gabriel Church Newsletter");
   const body = encodeURIComponent("Peace be with you,\n\n");
 
   return `mailto:?bcc=${encodeURIComponent(emails)}&subject=${subject}&body=${body}`;

@@ -1,5 +1,5 @@
-import { apiGet } from "../api/axios";
+import { adminGet } from "../api/axios";
 
 export function getDashboardStats() {
-  return apiGet("/dashboard/stats");
+  return adminGet("/dashboard/stats");
 }

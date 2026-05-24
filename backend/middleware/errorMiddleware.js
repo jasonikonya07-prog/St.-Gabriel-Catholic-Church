@@ -1,9 +1,10 @@
-import { ValidationError, UniqueConstraintError } from "sequelize";
 import ApiError from "../utils/ApiError.js";
 
-function getSequelizeDetails(error) {
-  return error.errors?.map((item) => ({
-    field: item.path,
+function getValidationDetails(error) {
+  const errors = Array.isArray(error.errors) ? error.errors : Object.values(error.errors || {});
+
+  return errors.map((item) => ({
+    field: item.path || item.properties?.path,
     message: item.message,
   }));
 }
@@ -13,12 +14,16 @@ function normalizeError(error) {
     return error;
   }
 
-  if (String(error?.name || "").startsWith("SequelizeConnection")) {
-    return new ApiError(503, "The database is unavailable. Please configure the production database connection.");
+  if (["MongoConfigurationError", "MongoNetworkError", "MongoServerSelectionError", "MongooseServerSelectionError"].includes(error?.name)) {
+    return new ApiError(503, "The database is unavailable. Please configure the MongoDB Atlas connection.");
   }
 
-  if (error instanceof ValidationError || error instanceof UniqueConstraintError) {
-    return new ApiError(400, "Validation failed. Please check your information.", getSequelizeDetails(error));
+  if (error?.name === "ValidationError" || error?.name === "CastError") {
+    return new ApiError(400, "Validation failed. Please check your information.", getValidationDetails(error));
+  }
+
+  if (error?.code === 11000) {
+    return new ApiError(409, "A record with this value already exists.");
   }
 
   if (error.type === "entity.too.large") {

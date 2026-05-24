@@ -1,8 +1,8 @@
 import ApiError from "../utils/ApiError.js";
 import { SiteSetting } from "../models/index.js";
-import { verifyAccessToken } from "../utils/generateTokens.js";
+import { verifyAccessToken } from "../utils/generateToken.js";
 
-const exemptPaths = new Set(["/api/admin-auth/login", "/api/admin-auth/me", "/api/settings/public", "/api/health"]);
+const exemptPaths = new Set(["/api/admin-auth/login", "/api/admin-auth/me", "/api/admin-auth/logout", "/api/settings/public", "/api/health"]);
 
 function getBearerToken(request) {
   const header = request.headers.authorization || "";
@@ -12,6 +12,7 @@ function getBearerToken(request) {
 
 function isExemptPath(path) {
   if (exemptPaths.has(path)) return true;
+  if (path.startsWith("/api/admin-auth/")) return true;
   if (path.startsWith("/api/settings/public/")) return true;
   return false;
 }
@@ -22,14 +23,14 @@ function hasValidAdminToken(request) {
 
   try {
     const payload = verifyAccessToken(token);
-    return !payload.tokenType || payload.tokenType === "admin";
+    return payload.tokenType === "admin";
   } catch {
     return false;
   }
 }
 
 async function getMaintenanceSettings() {
-  const setting = await SiteSetting.findByPk(1);
+  const setting = await SiteSetting.findOne({ id: "1" });
 
   if (!setting) {
     return {
@@ -63,6 +64,7 @@ export async function maintenanceMiddleware(request, response, next) {
     }
 
     response.status(503).json({
+      data: { maintenance },
       maintenance,
       message: maintenance.maintenanceMessage,
       status: "maintenance",

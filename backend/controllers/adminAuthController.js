@@ -1,8 +1,15 @@
 import ApiError from "../utils/ApiError.js";
-import { Admin, User } from "../models/index.js";
+import { Admin } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { checkAccountLocked, maxFailedLoginAttempts, recordFailedLogin, resetFailedLogin, throwLockedAccount } from "../utils/loginSecurity.js";
-import { clearRefreshTokenCookie, generateTokens, setRefreshTokenCookie } from "../utils/generateTokens.js";
+import {
+  checkAccountLocked,
+  logFailedLoginAttempt,
+  maxFailedLoginAttempts,
+  recordFailedLogin,
+  resetFailedLogin,
+  throwLockedAccount,
+} from "../utils/loginSecurity.js";
+import { clearRefreshTokenCookie, generateTokens, setRefreshTokenCookie } from "../utils/generateToken.js";
 import { logAudit, logSecurityEvent } from "../utils/securityLogger.js";
 
 function cleanString(value) {
@@ -14,6 +21,8 @@ function validateEmail(email) {
 }
 
 async function logFailedAdminLogin({ admin = null, email, reason, request, severity = "medium" }) {
+  await logFailedLoginAttempt({ email, reason, request, scope: "admin" });
+
   await logAudit({
     action: "admin.login_failed",
     actorEmail: email,
@@ -80,7 +89,7 @@ export const login = asyncHandler(async (request, response) => {
     throw new ApiError(400, "Please enter a valid email address.");
   }
 
-  const admin = await Admin.scope("withPassword").findOne({ where: { email } });
+  const admin = await Admin.findOne({ email });
 
   if (!admin) {
     await logFailedAdminLogin({ email, reason: "unknown_admin", request });
@@ -120,31 +129,8 @@ export const login = asyncHandler(async (request, response) => {
 
   const loginAt = new Date();
   admin.lastLogin = loginAt;
-  await admin.save({ fields: ["lastLogin"] });
+  await admin.save();
   await resetFailedLogin(admin);
-
-  const matchingWebsiteUser = await User.scope("withPassword").findOne({ where: { email: admin.email } });
-  if (matchingWebsiteUser) {
-    matchingWebsiteUser.fullName = admin.name || matchingWebsiteUser.fullName;
-    matchingWebsiteUser.isActive = Boolean(admin.isActive);
-    matchingWebsiteUser.lastLogin = loginAt;
-    matchingWebsiteUser.password = admin.password;
-
-    if (admin.role === "admin" || admin.role === "editor" || admin.role === "super_admin") {
-      matchingWebsiteUser.role = admin.role === "editor" ? "editor" : "admin";
-    }
-
-    await matchingWebsiteUser.save({ fields: ["fullName", "isActive", "lastLogin", "password", "role"] });
-  } else {
-    await User.create({
-      email: admin.email,
-      fullName: admin.name || "Parish Administrator",
-      isActive: Boolean(admin.isActive),
-      lastLogin: loginAt,
-      password: admin.password,
-      role: admin.role === "editor" ? "editor" : "admin",
-    });
-  }
 
   const { accessToken, refreshToken } = generateTokens(admin, "admin");
   setRefreshTokenCookie(response, refreshToken, "admin");

@@ -79,7 +79,7 @@ function Ministries() {
             Serve, belong, and grow in faith.
           </h2>
           <p className="mt-5 text-base leading-8 text-white/72 sm:text-lg">
-            St. Gabriel Catholic Church ministries offer prayerful ways to share your gifts and strengthen parish life.
+            St. Gabriel Church ministries offer prayerful ways to share your gifts and strengthen parish life.
           </p>
         </motion.div>
 

@@ -3,10 +3,17 @@ import { deleteAuditLog, deleteSecurityEvent, listAuditLogs, listSecurityEvents 
 import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = Router();
+const auditLogRoutes = Router();
+const securityEventRoutes = Router();
 
-router.get("/audit-logs", authenticate, listAuditLogs);
-router.get("/security-events", authenticate, listSecurityEvents);
-router.delete("/audit-logs/:id", authenticate, authorize("super_admin"), deleteAuditLog);
-router.delete("/security-events/:id", authenticate, authorize("super_admin"), deleteSecurityEvent);
+auditLogRoutes.get("/", authenticate, listAuditLogs);
+auditLogRoutes.delete("/:id", authenticate, authorize("super_admin"), deleteAuditLog);
 
+securityEventRoutes.get("/", authenticate, listSecurityEvents);
+securityEventRoutes.delete("/:id", authenticate, authorize("super_admin"), deleteSecurityEvent);
+
+router.use("/audit-logs", auditLogRoutes);
+router.use("/security-events", securityEventRoutes);
+
+export { auditLogRoutes, securityEventRoutes };
 export default router;

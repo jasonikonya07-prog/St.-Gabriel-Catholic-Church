@@ -150,7 +150,7 @@ function Login() {
           <p className="mt-7 text-xs font-extrabold uppercase tracking-[0.24em] text-gold">St. Gabriel Parish Account</p>
           <h1 className="mt-4 break-words font-display text-4xl font-bold leading-tight text-cream sm:text-5xl lg:text-6xl">Welcome Back</h1>
           <p className="mt-6 max-w-lg text-base font-semibold leading-8 text-cream/78">
-            Sign in to your parish account for a quiet, secure connection to St. Gabriel Catholic Church.
+            Sign in to your parish account for a quiet, secure connection to St. Gabriel Church.
           </p>
         </motion.div>
 

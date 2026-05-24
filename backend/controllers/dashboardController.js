@@ -1,20 +1,82 @@
-import { Op, col, fn } from "sequelize";
-import { Announcement, ContactMessage, Donation, Event, NewsletterSubscriber, PrayerRequest } from "../models/index.js";
+import {
+  Announcement,
+  AuditLog,
+  ContactMessage,
+  Donation,
+  Event,
+  NewsletterSubscriber,
+  PrayerRequest,
+  SecurityEvent,
+} from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-export const getDashboardStats = asyncHandler(async (request, response) => {
+const recentLimit = 5;
+
+function startOfTodayDateString() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayDate = [
+
+  return [
     today.getFullYear(),
     String(today.getMonth() + 1).padStart(2, "0"),
     String(today.getDate()).padStart(2, "0"),
   ].join("-");
+}
 
+function amountFacet(match = {}) {
+  return [
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$amount" },
+      },
+    },
+  ];
+}
+
+async function donationSummary() {
+  const [result] = await Donation.aggregate([
+    {
+      $facet: {
+        completed: amountFacet({ status: "completed" }),
+        monthly: [
+          {
+            $group: {
+              _id: { $dateToString: { date: "$createdAt", format: "%Y-%m" } },
+              total: { $sum: "$amount" },
+            },
+          },
+          { $project: { _id: 0, month: "$_id", total: 1 } },
+          { $sort: { month: 1 } },
+        ],
+        pending: amountFacet({ status: "pending" }),
+        total: amountFacet(),
+      },
+    },
+    {
+      $project: {
+        completedDonationsAmount: { $ifNull: [{ $arrayElemAt: ["$completed.total", 0] }, 0] },
+        monthlyDonationsTotal: "$monthly",
+        pendingDonationsAmount: { $ifNull: [{ $arrayElemAt: ["$pending.total", 0] }, 0] },
+        totalDonationsAmount: { $ifNull: [{ $arrayElemAt: ["$total.total", 0] }, 0] },
+      },
+    },
+  ]);
+
+  return {
+    completedDonationsAmount: Number(result?.completedDonationsAmount || 0),
+    monthlyDonationsTotal: (result?.monthlyDonationsTotal || []).map((item) => ({
+      month: item.month,
+      total: Number(item.total || 0),
+    })),
+    pendingDonationsAmount: Number(result?.pendingDonationsAmount || 0),
+    totalDonationsAmount: Number(result?.totalDonationsAmount || 0),
+  };
+}
+
+async function countSummary(todayDate) {
   const [
-    totalDonationsAmount,
-    completedDonationsAmount,
-    pendingDonationsAmount,
     totalContactMessages,
     unreadContactMessages,
     totalPrayerRequests,
@@ -22,64 +84,84 @@ export const getDashboardStats = asyncHandler(async (request, response) => {
     totalNewsletterSubscribers,
     publishedAnnouncementsCount,
     upcomingEventsCount,
-    monthlyDonationsTotal,
-    recentDonations,
-    recentContactMessages,
-    recentPrayerRequests,
   ] = await Promise.all([
-    Donation.sum("amount"),
-    Donation.sum("amount", { where: { status: "completed" } }),
-    Donation.sum("amount", { where: { status: "pending" } }),
-    ContactMessage.count(),
-    ContactMessage.count({ where: { status: "unread" } }),
-    PrayerRequest.count(),
-    PrayerRequest.count({ where: { status: "pending" } }),
-    NewsletterSubscriber.count({ where: { isSubscribed: true } }),
-    Announcement.count({ where: { isPublished: true } }),
-    Event.count({ where: { eventDate: { [Op.gte]: todayDate }, isPublished: true } }),
-    Donation.findAll({
-      attributes: [[fn("DATE_FORMAT", col("createdAt"), "%Y-%m"), "month"], [fn("SUM", col("amount")), "total"]],
-      group: [fn("DATE_FORMAT", col("createdAt"), "%Y-%m")],
-      order: [[fn("DATE_FORMAT", col("createdAt"), "%Y-%m"), "ASC"]],
-      raw: true,
-    }),
-    Donation.findAll({ limit: 5, order: [["createdAt", "DESC"]] }),
-    ContactMessage.findAll({ limit: 5, order: [["createdAt", "DESC"]] }),
-    PrayerRequest.findAll({ limit: 5, order: [["createdAt", "DESC"]] }),
+    ContactMessage.countDocuments(),
+    ContactMessage.countDocuments({ status: "unread" }),
+    PrayerRequest.countDocuments(),
+    PrayerRequest.countDocuments({ status: "pending" }),
+    NewsletterSubscriber.countDocuments({ isSubscribed: true }),
+    Announcement.countDocuments({ isPublished: true }),
+    Event.countDocuments({ eventDate: { $gte: todayDate }, isPublished: true }),
   ]);
 
-  const stats = {
-    completedDonationsAmount: Number(completedDonationsAmount || 0),
-    pendingDonationsAmount: Number(pendingDonationsAmount || 0),
+  return {
     pendingPrayerRequests,
     publishedAnnouncementsCount,
     totalContactMessages,
-    totalDonationsAmount: Number(totalDonationsAmount || 0),
     totalNewsletterSubscribers,
     totalPrayerRequests,
     unreadContactMessages,
     upcomingEventsCount,
   };
-  const monthlyDonations = monthlyDonationsTotal.map((item) => ({
-    month: item.month,
-    total: Number(item.total || 0),
-  }));
+}
+
+function recent(model) {
+  return model.find().sort({ createdAt: -1 }).limit(recentLimit);
+}
+
+async function recentRecords() {
+  const [recentDonations, recentContactMessages, recentPrayerRequests, recentAuditLogs, recentSecurityEvents] = await Promise.all([
+    recent(Donation),
+    recent(ContactMessage),
+    recent(PrayerRequest),
+    recent(AuditLog),
+    recent(SecurityEvent),
+  ]);
+
+  return {
+    recentAuditLogs,
+    recentContactMessages,
+    recentDonations,
+    recentPrayerRequests,
+    recentSecurityEvents,
+  };
+}
+
+export const getDashboardStats = asyncHandler(async (request, response) => {
+  const todayDate = startOfTodayDateString();
+  const [donations, counts, recentData] = await Promise.all([donationSummary(), countSummary(todayDate), recentRecords()]);
+  const stats = {
+    completedDonationsAmount: donations.completedDonationsAmount,
+    pendingDonationsAmount: donations.pendingDonationsAmount,
+    pendingPrayerRequests: counts.pendingPrayerRequests,
+    publishedAnnouncementsCount: counts.publishedAnnouncementsCount,
+    totalContactMessages: counts.totalContactMessages,
+    totalDonationsAmount: donations.totalDonationsAmount,
+    totalNewsletterSubscribers: counts.totalNewsletterSubscribers,
+    totalPrayerRequests: counts.totalPrayerRequests,
+    unreadContactMessages: counts.unreadContactMessages,
+    upcomingEventsCount: counts.upcomingEventsCount,
+  };
 
   response.json({
+    charts: {
+      monthlyDonationsTotal: donations.monthlyDonationsTotal,
+    },
     data: {
-      monthlyDonationsTotal: monthlyDonations,
-      recentContactMessages,
-      recentDonations,
-      recentPrayerRequests,
+      monthlyDonationsTotal: donations.monthlyDonationsTotal,
+      recentAuditLogs: recentData.recentAuditLogs,
+      recentContactMessages: recentData.recentContactMessages,
+      recentDonations: recentData.recentDonations,
+      recentPrayerRequests: recentData.recentPrayerRequests,
+      recentSecurityEvents: recentData.recentSecurityEvents,
       stats,
     },
-    charts: {
-      monthlyDonationsTotal: monthlyDonations,
-    },
     recent: {
-      contactMessages: recentContactMessages,
-      donations: recentDonations,
-      prayerRequests: recentPrayerRequests,
+      auditLogs: recentData.recentAuditLogs,
+      contactMessages: recentData.recentContactMessages,
+      donations: recentData.recentDonations,
+      prayerRequests: recentData.recentPrayerRequests,
+      securityEvents: recentData.recentSecurityEvents,
     },
     stats,
     success: true,

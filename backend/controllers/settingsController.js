@@ -1,5 +1,5 @@
 import ApiError from "../utils/ApiError.js";
-import { ButtonControl, SiteSetting, WebsiteSetting } from "../models/index.js";
+import { ButtonControl, SiteSetting } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { logAudit, logSecurityEvent } from "../utils/securityLogger.js";
 
@@ -11,67 +11,16 @@ const buttonDefaults = {
   view_mass_times: "View Mass Times",
 };
 
-const homepageButtonSettings = {
-  contact_us: "homepageContactEnabled",
-  donate_now: "homepageDonateEnabled",
-  newsletter_subscribe: "homepageNewsletterEnabled",
-  prayer_request: "homepagePrayerEnabled",
-  view_mass_times: "homepageMassTimesEnabled",
-};
+const buttonKeys = Object.keys(buttonDefaults);
 
-const defaultWebsiteSettings = {
-  accountName: "",
-  accountNumber: "",
-  address: "",
-  backgroundColor: "#F8F3E7",
-  bankName: "",
-  churchName: "St. Gabriel Catholic Church",
-  email: "office@stgabrielparish.org",
-  facebook: "",
-  goldAccent: "#C9A227",
-  heroBackgroundImage: "",
-  heroSubtitle: "Join us as we grow together in Christ through prayer, service, and love.",
-  heroTitle: "Faith, Worship, Community, and Hope",
-  homepageContactEnabled: true,
-  homepageDisabledReason: "This action is temporarily unavailable.",
-  homepageDonateEnabled: true,
-  homepageMassTimesEnabled: true,
-  homepageNewsletterEnabled: true,
-  homepagePrayerEnabled: true,
-  instagram: "",
-  keywords: "Catholic church, Mass, prayer, parish",
-  logoUrl: "",
-  mainCtaText: "View Mass Times",
-  maintenanceEnabled: false,
+const siteSettingDefaults = {
+  allowRegistration: true,
+  allowUserLogin: true,
   maintenanceExpectedBack: null,
-  maintenanceMessage: "We are currently improving our website. Please check back soon.",
-  maintenanceTitle: "Website Under Maintenance",
-  metaDescription: "St. Gabriel Catholic Church is a welcoming Catholic parish community.",
-  mpesaPaybill: "",
-  officeHours: "Monday - Friday, 9:00 AM - 5:00 PM",
-  phone: "",
-  primaryColor: "#071A2D",
-  secondaryCtaText: "Donate Now",
-  stkPushEnabled: true,
-  tagline: "Growing together in faith, worship, and service.",
-  tiktok: "",
-  tillNumber: "",
-  websiteTitle: "St. Gabriel Catholic Church",
-  whatsapp: "",
-  youtube: "",
+  maintenanceMessage: "We are making a few updates. Please check back soon.",
+  maintenanceMode: false,
+  maintenanceTitle: "Website temporarily unavailable",
 };
-
-const websiteSettingKeys = Object.keys(defaultWebsiteSettings);
-const booleanWebsiteKeys = new Set([
-  "homepageContactEnabled",
-  "homepageDonateEnabled",
-  "homepageMassTimesEnabled",
-  "homepageNewsletterEnabled",
-  "homepagePrayerEnabled",
-  "maintenanceEnabled",
-  "stkPushEnabled",
-]);
-const hexColorKeys = new Set(["backgroundColor", "goldAccent", "primaryColor"]);
 
 function cleanString(value) {
   return String(value ?? "").trim();
@@ -79,15 +28,21 @@ function cleanString(value) {
 
 function normalizeBoolean(value) {
   if (typeof value === "boolean") return value;
-  return ["true", "1", "yes", "on", "enabled", "published"].includes(String(value).toLowerCase());
+  return ["true", "1", "yes", "on", "enabled"].includes(String(value).toLowerCase());
 }
 
-function parseStoredValue(row) {
-  try {
-    return JSON.parse(row.settingValue);
-  } catch {
-    return row.settingValue;
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function readFirstPresent(source, keys) {
+  for (const key of keys) {
+    if (hasOwn(source, key)) {
+      return { exists: true, value: source[key] };
+    }
   }
+
+  return { exists: false, value: undefined };
 }
 
 function parseOptionalDate(value, fieldName) {
@@ -102,114 +57,104 @@ function parseOptionalDate(value, fieldName) {
   return date;
 }
 
-function publicButton(row) {
-  return {
-    buttonKey: row.buttonKey,
-    buttonLabel: row.buttonLabel,
-    disabledReason: row.disabledReason,
-    isEnabled: Boolean(row.isEnabled),
+function serializeButton(button, { includeMeta = false } = {}) {
+  const data = {
+    buttonKey: button.buttonKey,
+    buttonLabel: button.buttonLabel,
+    disabledReason: button.disabledReason || null,
+    isEnabled: Boolean(button.isEnabled),
   };
+
+  if (includeMeta) {
+    data.id = button.id;
+    data.updatedAt = button.updatedAt;
+    data.updatedBy = button.updatedBy || null;
+  }
+
+  return data;
 }
 
-function buttonControlsByKey(rows) {
-  return Object.fromEntries(rows.map((row) => [row.buttonKey, publicButton(row)]));
+function serializeButtons(buttons, options = {}) {
+  return buttons.map((button) => serializeButton(button, options));
 }
 
-async function ensureSiteSetting() {
-  const [setting] = await SiteSetting.findOrCreate({
-    defaults: {
-      allowRegistration: true,
-      allowUserLogin: true,
-      maintenanceMessage: defaultWebsiteSettings.maintenanceMessage,
-      maintenanceMode: false,
-      maintenanceTitle: defaultWebsiteSettings.maintenanceTitle,
-    },
-    where: { id: 1 },
-  });
-
-  return setting;
+function buttonsByKey(buttons, options = {}) {
+  return Object.fromEntries(buttons.map((button) => [button.buttonKey, serializeButton(button, options)]));
 }
 
-async function ensureButtonControls() {
-  await Promise.all(
-    Object.entries(buttonDefaults).map(([buttonKey, buttonLabel]) =>
-      ButtonControl.findOrCreate({
-        defaults: {
-          buttonKey,
-          buttonLabel,
-          isEnabled: true,
-        },
-        where: { buttonKey },
-      }),
-    ),
-  );
-
-  return ButtonControl.findAll({ order: [["id", "ASC"]] });
-}
-
-async function readStructuredSettings() {
-  const [siteSetting, buttonRows] = await Promise.all([ensureSiteSetting(), ensureButtonControls()]);
-
-  return {
-    allowRegistration: Boolean(siteSetting.allowRegistration),
-    allowUserLogin: Boolean(siteSetting.allowUserLogin),
-    buttonControls: buttonControlsByKey(buttonRows),
-    buttons: buttonRows.map(publicButton),
+function serializeSettings(siteSetting, buttons, { includeMeta = false } = {}) {
+  const maintenance = {
+    enabled: Boolean(siteSetting.maintenanceMode),
+    expectedBack: siteSetting.maintenanceExpectedBack,
     maintenanceExpectedBack: siteSetting.maintenanceExpectedBack,
     maintenanceMessage: siteSetting.maintenanceMessage,
     maintenanceMode: Boolean(siteSetting.maintenanceMode),
     maintenanceTitle: siteSetting.maintenanceTitle,
+    message: siteSetting.maintenanceMessage,
+    title: siteSetting.maintenanceTitle,
+  };
+  const auth = {
+    allowRegistration: Boolean(siteSetting.allowRegistration),
+    allowUserLogin: Boolean(siteSetting.allowUserLogin),
+  };
+  const serializedButtons = serializeButtons(buttons, { includeMeta });
+  const buttonControls = buttonsByKey(buttons, { includeMeta });
+
+  return {
+    auth,
+    buttonControls,
+    buttons: serializedButtons,
+    maintenance,
+    allowRegistration: auth.allowRegistration,
+    allowUserLogin: auth.allowUserLogin,
+    maintenanceExpectedBack: maintenance.expectedBack,
+    maintenanceMessage: maintenance.message,
+    maintenanceMode: maintenance.enabled,
+    maintenanceTitle: maintenance.title,
   };
 }
 
-async function readWebsiteSettings() {
-  const [rows, structured] = await Promise.all([WebsiteSetting.findAll({ raw: true }), readStructuredSettings()]);
-  const storedSettings = Object.fromEntries(rows.map((row) => [row.settingKey, parseStoredValue(row)]));
-  const settings = {
-    ...defaultWebsiteSettings,
-    ...storedSettings,
-    maintenanceEnabled: structured.maintenanceMode,
-    maintenanceExpectedBack: structured.maintenanceExpectedBack,
-    maintenanceMessage: structured.maintenanceMessage,
-    maintenanceTitle: structured.maintenanceTitle,
-  };
-
-  for (const [buttonKey, settingKey] of Object.entries(homepageButtonSettings)) {
-    if (structured.buttonControls[buttonKey]) {
-      settings[settingKey] = structured.buttonControls[buttonKey].isEnabled;
-    }
-  }
-
-  return settings;
+async function ensureSiteSetting() {
+  return SiteSetting.findOneAndUpdate(
+    { id: "1" },
+    { $setOnInsert: { id: "1", ...siteSettingDefaults } },
+    {
+      new: true,
+      runValidators: true,
+      setDefaultsOnInsert: true,
+      upsert: true,
+    },
+  );
 }
 
-function normalizeWebsiteSettingsPatch(body) {
-  const patch = {};
+async function ensureButtonControls() {
+  const buttons = await Promise.all(
+    buttonKeys.map((buttonKey) =>
+      ButtonControl.findOneAndUpdate(
+        { buttonKey },
+        {
+          $setOnInsert: {
+            buttonKey,
+            buttonLabel: buttonDefaults[buttonKey],
+            isEnabled: true,
+          },
+        },
+        {
+          new: true,
+          runValidators: true,
+          setDefaultsOnInsert: true,
+          upsert: true,
+        },
+      ),
+    ),
+  );
 
-  for (const key of websiteSettingKeys) {
-    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
-
-    if (booleanWebsiteKeys.has(key)) {
-      patch[key] = normalizeBoolean(body[key]);
-      continue;
-    }
-
-    patch[key] = cleanString(body[key]);
-  }
-
-  return patch;
+  return buttons;
 }
 
-function validateWebsiteSettingsPatch(patch) {
-  if (patch.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanString(patch.email).toLowerCase())) {
-    throw new ApiError(400, "Please enter a valid email address.");
-  }
-
-  for (const key of hexColorKeys) {
-    if (patch[key] && !/^#[0-9A-Fa-f]{6}$/.test(cleanString(patch[key]))) {
-      throw new ApiError(400, `${key} must be a valid hex color, for example #071A2D.`);
-    }
-  }
+async function readSettings(options = {}) {
+  const [siteSetting, buttons] = await Promise.all([ensureSiteSetting(), ensureButtonControls()]);
+  return serializeSettings(siteSetting, buttons, options);
 }
 
 function changedKeysFrom(previous, patch) {
@@ -220,13 +165,10 @@ function changedKeysFrom(previous, patch) {
   });
 }
 
-async function logSettingsAudit({ action, changedKeys, description, details = {}, eventType = null, request, severity = "low" }) {
+async function logSettingsChange({ action, changedKeys, description, details = {}, eventType = null, request, severity = "low" }) {
   if (!changedKeys.length) return;
 
-  const auditDetails = {
-    changedKeys,
-    ...details,
-  };
+  const auditDetails = { changedKeys, ...details };
 
   await logAudit({
     action,
@@ -235,6 +177,8 @@ async function logSettingsAudit({ action, changedKeys, description, details = {}
     actorType: "admin",
     description,
     details: auditDetails,
+    entity: "site_setting",
+    entityId: "1",
     module: "settings",
     request,
   });
@@ -250,64 +194,70 @@ async function logSettingsAudit({ action, changedKeys, description, details = {}
   }
 }
 
-function normalizeMaintenancePatch(body) {
+function normalizeMaintenancePatch(body = {}) {
   const patch = {};
+  const mode = readFirstPresent(body, ["maintenanceMode", "enabled"]);
+  const title = readFirstPresent(body, ["maintenanceTitle", "title"]);
+  const message = readFirstPresent(body, ["maintenanceMessage", "message"]);
+  const expectedBack = readFirstPresent(body, ["maintenanceExpectedBack", "expectedBack"]);
 
-  if (Object.prototype.hasOwnProperty.call(body, "maintenanceMode")) {
-    patch.maintenanceMode = normalizeBoolean(body.maintenanceMode);
+  if (mode.exists) {
+    patch.maintenanceMode = normalizeBoolean(mode.value);
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "maintenanceTitle")) {
-    patch.maintenanceTitle = cleanString(body.maintenanceTitle);
+  if (title.exists) {
+    patch.maintenanceTitle = cleanString(title.value);
     if (!patch.maintenanceTitle) throw new ApiError(400, "Maintenance title is required.");
-    if (patch.maintenanceTitle.length > 180) throw new ApiError(400, "Maintenance title must be 180 characters or fewer.");
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "maintenanceMessage")) {
-    patch.maintenanceMessage = cleanString(body.maintenanceMessage);
+  if (message.exists) {
+    patch.maintenanceMessage = cleanString(message.value);
     if (!patch.maintenanceMessage) throw new ApiError(400, "Maintenance message is required.");
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "maintenanceExpectedBack")) {
-    patch.maintenanceExpectedBack = parseOptionalDate(body.maintenanceExpectedBack, "maintenanceExpectedBack");
+  if (expectedBack.exists) {
+    patch.maintenanceExpectedBack = parseOptionalDate(expectedBack.value, "maintenanceExpectedBack");
   }
 
   return patch;
 }
 
-function normalizeAuthOptionsPatch(body) {
+function normalizeAuthOptionsPatch(body = {}) {
   const patch = {};
 
-  if (Object.prototype.hasOwnProperty.call(body, "allowUserLogin")) {
+  if (hasOwn(body, "allowUserLogin")) {
     patch.allowUserLogin = normalizeBoolean(body.allowUserLogin);
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "allowRegistration")) {
+  if (hasOwn(body, "allowRegistration")) {
     patch.allowRegistration = normalizeBoolean(body.allowRegistration);
   }
 
   return patch;
 }
 
-function normalizeButtonPatch(body) {
+function normalizeButtonPatch(body = {}) {
   const patch = {};
+  const enabled = readFirstPresent(body, ["isEnabled", "enabled"]);
 
-  if (Object.prototype.hasOwnProperty.call(body, "isEnabled")) {
-    patch.isEnabled = normalizeBoolean(body.isEnabled);
+  if (enabled.exists) {
+    patch.isEnabled = normalizeBoolean(enabled.value);
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "disabledReason")) {
+  if (hasOwn(body, "disabledReason")) {
     patch.disabledReason = cleanString(body.disabledReason) || null;
-    if (patch.disabledReason && patch.disabledReason.length > 255) {
-      throw new ApiError(400, "Disabled reason must be 255 characters or fewer.");
-    }
+  }
+
+  if (hasOwn(body, "buttonLabel")) {
+    patch.buttonLabel = cleanString(body.buttonLabel);
+    if (!patch.buttonLabel) throw new ApiError(400, "Button label is required.");
   }
 
   return patch;
 }
 
 export const getPublicSettings = asyncHandler(async (request, response) => {
-  const settings = await readStructuredSettings();
+  const settings = await readSettings();
 
   response.json({
     data: { settings },
@@ -317,7 +267,7 @@ export const getPublicSettings = asyncHandler(async (request, response) => {
 });
 
 export const getAdminSettings = asyncHandler(async (request, response) => {
-  const settings = await readStructuredSettings();
+  const settings = await readSettings({ includeMeta: true });
 
   response.json({
     data: { settings },
@@ -327,22 +277,21 @@ export const getAdminSettings = asyncHandler(async (request, response) => {
 });
 
 export const getButtonControls = asyncHandler(async (request, response) => {
-  const buttonRows = await ensureButtonControls();
-  const buttons = buttonRows.map(publicButton);
+  const buttons = await ensureButtonControls();
 
   response.json({
-    buttonControls: buttonControlsByKey(buttonRows),
-    buttons,
+    buttonControls: buttonsByKey(buttons),
+    buttons: serializeButtons(buttons),
     data: {
-      buttonControls: buttonControlsByKey(buttonRows),
-      buttons,
+      buttonControls: buttonsByKey(buttons),
+      buttons: serializeButtons(buttons),
     },
     success: true,
   });
 });
 
 export const updateMaintenance = asyncHandler(async (request, response) => {
-  const patch = normalizeMaintenancePatch(request.body || {});
+  const patch = normalizeMaintenancePatch(request.body);
 
   if (!Object.keys(patch).length) {
     throw new ApiError(400, "No maintenance settings were provided.");
@@ -350,23 +299,26 @@ export const updateMaintenance = asyncHandler(async (request, response) => {
 
   const siteSetting = await ensureSiteSetting();
   const previous = siteSetting.toJSON();
-  siteSetting.set(patch);
-  await siteSetting.save({ fields: Object.keys(patch) });
+  siteSetting.set({
+    ...patch,
+    updatedBy: request.admin?.id || null,
+  });
+  await siteSetting.save();
 
   const changedKeys = changedKeysFrom(previous, patch);
-  await logSettingsAudit({
+  await logSettingsChange({
     action: changedKeys.includes("maintenanceMode") ? "maintenance.mode_changed" : "settings.maintenance_updated",
     changedKeys,
     description: "Admin updated maintenance settings.",
     details: {
-      maintenanceMode: siteSetting.maintenanceMode,
+      maintenanceMode: Boolean(siteSetting.maintenanceMode),
     },
     eventType: changedKeys.includes("maintenanceMode") ? "maintenance_mode_changed" : "settings.maintenance_updated",
     request,
     severity: siteSetting.maintenanceMode ? "medium" : "low",
   });
 
-  const settings = await readStructuredSettings();
+  const settings = await readSettings({ includeMeta: true });
   response.json({
     data: { settings },
     message: "Maintenance settings saved successfully.",
@@ -376,7 +328,7 @@ export const updateMaintenance = asyncHandler(async (request, response) => {
 });
 
 export const updateAuthOptions = asyncHandler(async (request, response) => {
-  const patch = normalizeAuthOptionsPatch(request.body || {});
+  const patch = normalizeAuthOptionsPatch(request.body);
 
   if (!Object.keys(patch).length) {
     throw new ApiError(400, "No authentication settings were provided.");
@@ -384,10 +336,13 @@ export const updateAuthOptions = asyncHandler(async (request, response) => {
 
   const siteSetting = await ensureSiteSetting();
   const previous = siteSetting.toJSON();
-  siteSetting.set(patch);
-  await siteSetting.save({ fields: Object.keys(patch) });
+  siteSetting.set({
+    ...patch,
+    updatedBy: request.admin?.id || null,
+  });
+  await siteSetting.save();
 
-  await logSettingsAudit({
+  await logSettingsChange({
     action: "settings.auth_options_updated",
     changedKeys: changedKeysFrom(previous, patch),
     description: "Admin updated website authentication options.",
@@ -396,7 +351,7 @@ export const updateAuthOptions = asyncHandler(async (request, response) => {
     request,
   });
 
-  const settings = await readStructuredSettings();
+  const settings = await readSettings({ includeMeta: true });
   response.json({
     data: { settings },
     message: "Authentication options saved successfully.",
@@ -412,29 +367,37 @@ export const updateButtonControl = asyncHandler(async (request, response) => {
     throw new ApiError(404, "Button control not found.");
   }
 
-  const patch = normalizeButtonPatch(request.body || {});
+  const patch = normalizeButtonPatch(request.body);
 
   if (!Object.keys(patch).length) {
     throw new ApiError(400, "No button settings were provided.");
   }
 
-  const [button] = await ButtonControl.findOrCreate({
-    defaults: {
-      buttonKey,
-      buttonLabel: buttonDefaults[buttonKey],
-      isEnabled: true,
+  const button = await ButtonControl.findOneAndUpdate(
+    { buttonKey },
+    {
+      $setOnInsert: {
+        buttonKey,
+        buttonLabel: buttonDefaults[buttonKey],
+        isEnabled: true,
+      },
     },
-    where: { buttonKey },
-  });
+    {
+      new: true,
+      runValidators: true,
+      setDefaultsOnInsert: true,
+      upsert: true,
+    },
+  );
   const previous = button.toJSON();
   button.set({
     ...patch,
     updatedBy: request.admin?.id || null,
   });
-  await button.save({ fields: [...Object.keys(patch), "updatedBy"] });
+  await button.save();
 
   const changedKeys = changedKeysFrom(previous, patch);
-  await logSettingsAudit({
+  await logSettingsChange({
     action: changedKeys.includes("isEnabled") ? (button.isEnabled ? "button.enabled" : "button.disabled") : "settings.button_updated",
     changedKeys,
     description: "Admin updated homepage button controls.",
@@ -447,120 +410,42 @@ export const updateButtonControl = asyncHandler(async (request, response) => {
   });
 
   response.json({
-    button: publicButton(button),
-    data: { button: publicButton(button) },
+    button: serializeButton(button, { includeMeta: true }),
+    data: { button: serializeButton(button, { includeMeta: true }) },
     message: "Button settings saved successfully.",
     success: true,
   });
 });
 
-export const getSettings = asyncHandler(async (request, response) => {
-  const settings = await readWebsiteSettings();
-
-  response.json({
-    data: { settings },
-    settings,
-    success: true,
-  });
-});
+export const getSettings = getPublicSettings;
 
 export const updateSettings = asyncHandler(async (request, response) => {
-  const patch = normalizeWebsiteSettingsPatch(request.body || {});
+  const maintenancePatch = normalizeMaintenancePatch(request.body);
+  const authPatch = normalizeAuthOptionsPatch(request.body);
+  const patch = { ...maintenancePatch, ...authPatch };
 
   if (!Object.keys(patch).length) {
-    throw new ApiError(400, "No valid settings were provided.");
+    throw new ApiError(400, "No supported settings were provided.");
   }
 
-  validateWebsiteSettingsPatch(patch);
-  const previousSettings = await readWebsiteSettings();
+  const siteSetting = await ensureSiteSetting();
+  const previous = siteSetting.toJSON();
+  siteSetting.set({
+    ...patch,
+    updatedBy: request.admin?.id || null,
+  });
+  await siteSetting.save();
 
-  await Promise.all(
-    Object.entries(patch).map(([settingKey, value]) =>
-      WebsiteSetting.upsert({
-        settingKey,
-        settingValue: JSON.stringify(value),
-      }),
-    ),
-  );
-
-  if (
-    Object.prototype.hasOwnProperty.call(patch, "maintenanceEnabled") ||
-    Object.prototype.hasOwnProperty.call(patch, "maintenanceTitle") ||
-    Object.prototype.hasOwnProperty.call(patch, "maintenanceMessage") ||
-    Object.prototype.hasOwnProperty.call(patch, "maintenanceExpectedBack")
-  ) {
-    const siteSetting = await ensureSiteSetting();
-    const structuredPatch = {};
-    if (Object.prototype.hasOwnProperty.call(patch, "maintenanceEnabled")) structuredPatch.maintenanceMode = patch.maintenanceEnabled;
-    if (Object.prototype.hasOwnProperty.call(patch, "maintenanceTitle")) structuredPatch.maintenanceTitle = patch.maintenanceTitle;
-    if (Object.prototype.hasOwnProperty.call(patch, "maintenanceMessage")) structuredPatch.maintenanceMessage = patch.maintenanceMessage;
-    if (Object.prototype.hasOwnProperty.call(patch, "maintenanceExpectedBack")) {
-      structuredPatch.maintenanceExpectedBack = parseOptionalDate(patch.maintenanceExpectedBack, "maintenanceExpectedBack");
-    }
-    siteSetting.set(structuredPatch);
-    await siteSetting.save({ fields: Object.keys(structuredPatch) });
-  }
-
-  await Promise.all(
-    Object.entries(homepageButtonSettings)
-      .filter(([, settingKey]) => Object.prototype.hasOwnProperty.call(patch, settingKey))
-      .map(([buttonKey, settingKey]) =>
-        ButtonControl.upsert({
-          buttonKey,
-          buttonLabel: buttonDefaults[buttonKey],
-          disabledReason: patch[settingKey] ? null : patch.homepageDisabledReason || null,
-          isEnabled: Boolean(patch[settingKey]),
-          updatedBy: request.admin?.id || null,
-        }),
-      ),
-  );
-
-  const settings = await readWebsiteSettings();
-  const changedKeys = changedKeysFrom(previousSettings, patch);
-  await logSettingsAudit({
-    action: changedKeys.includes("maintenanceEnabled") ? "maintenance.mode_changed" : "admin.updated_settings",
-    changedKeys,
+  await logSettingsChange({
+    action: "settings.updated",
+    changedKeys: changedKeysFrom(previous, patch),
     description: "Admin updated website settings.",
-    details: { changedKeys },
-    eventType: changedKeys.includes("maintenanceEnabled") ? "maintenance_mode_changed" : "admin.updated_settings",
+    details: patch,
+    eventType: "settings.updated",
     request,
-    severity: patch.maintenanceEnabled ? "medium" : "low",
   });
 
-  await Promise.all(
-    Object.entries(homepageButtonSettings)
-      .filter(([, settingKey]) => changedKeys.includes(settingKey))
-      .map(async ([buttonKey, settingKey]) => {
-        const enabled = Boolean(patch[settingKey]);
-        await logAudit({
-          action: enabled ? "button.enabled" : "button.disabled",
-          actorEmail: request.admin?.email,
-          actorId: request.admin?.id,
-          actorType: "admin",
-          description: enabled ? "Admin enabled a homepage button." : "Admin disabled a homepage button.",
-          details: {
-            buttonKey,
-            enabled,
-          },
-          entity: "button_control",
-          entityId: buttonKey,
-          module: "settings",
-          request,
-        });
-
-        await logSecurityEvent({
-          details: {
-            buttonKey,
-            enabled,
-          },
-          email: request.admin?.email,
-          eventType: enabled ? "button.enabled" : "button.disabled",
-          request,
-          severity: "low",
-        });
-      }),
-  );
-
+  const settings = await readSettings({ includeMeta: true });
   response.json({
     data: { settings },
     message: "Website settings saved successfully.",

@@ -109,7 +109,7 @@ function Gallery() {
                   {selectedImage.category}
                 </span>
                 <p className="mt-4 max-w-2xl break-words font-display text-2xl font-bold leading-tight text-white sm:text-4xl">
-                  St. Gabriel Catholic Church
+                  St. Gabriel Church
                 </p>
               </div>
             </div>
@@ -140,7 +140,7 @@ function Gallery() {
             <p className="eyebrow">Parish gallery</p>
             <h2 className="section-title">Parish Life Gallery</h2>
             <p className="section-copy mx-auto">
-              A glimpse of worship, service, formation, and community life at St. Gabriel Catholic Church.
+              A glimpse of worship, service, formation, and community life at St. Gabriel Church.
             </p>
           </motion.div>
 

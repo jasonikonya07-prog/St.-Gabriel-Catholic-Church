@@ -1,77 +1,105 @@
-import { DataTypes } from "sequelize";
+import mongoose from "mongoose";
+import { configureMongoSchema, objectIdStringDefault, optionalObjectId } from "../utils/mongooseModel.js";
+
+const { Schema } = mongoose;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const contactStatuses = ["unread", "read", "replied"];
 
-export default function defineContactMessage(sequelize) {
-  return sequelize.define(
-    "ContactMessage",
-    {
-      id: {
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true,
-        type: DataTypes.UUID,
-      },
-      userId: {
-        allowNull: true,
-        type: DataTypes.UUID,
-      },
-      fullName: {
-        allowNull: false,
-        type: DataTypes.STRING(120),
-        validate: {
-          notEmpty: true,
-        },
-      },
-      email: {
-        allowNull: false,
-        set(value) {
-          this.setDataValue("email", String(value || "").trim().toLowerCase());
-        },
-        type: DataTypes.STRING(160),
-        validate: {
-          isEmail: true,
-          notEmpty: true,
-        },
-      },
-      phone: {
-        allowNull: true,
-        type: DataTypes.STRING(40),
-      },
-      subject: {
-        allowNull: false,
-        defaultValue: "Website inquiry",
-        type: DataTypes.STRING(180),
-        validate: {
-          notEmpty: true,
-        },
-      },
-      message: {
-        allowNull: false,
-        type: DataTypes.TEXT,
-        validate: {
-          notEmpty: true,
-        },
-      },
-      status: {
-        allowNull: false,
-        defaultValue: "unread",
-        type: DataTypes.ENUM(...contactStatuses),
-      },
-      adminNotes: {
-        allowNull: true,
-        type: DataTypes.TEXT,
+const contactMessageSchema = new Schema(
+  {
+    id: {
+      default: objectIdStringDefault,
+      immutable: true,
+      required: true,
+      type: String,
+      unique: true,
+    },
+    adminNotes: {
+      default: null,
+      maxlength: [1000, "Admin notes must be 1000 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+    createdBy: {
+      default: null,
+      ref: "User",
+      set: optionalObjectId,
+      type: Schema.Types.ObjectId,
+    },
+    email: {
+      index: true,
+      lowercase: true,
+      maxlength: [160, "Email must be 160 characters or fewer."],
+      required: [true, "Email is required."],
+      trim: true,
+      type: String,
+      validate: {
+        message: "Please enter a valid email address.",
+        validator: (value) => emailRegex.test(String(value || "")),
       },
     },
-    {
-      indexes: [
-        { fields: ["userId"] },
-        { fields: ["email"] },
-        { fields: ["fullName"] },
-        { fields: ["status"] },
-        { fields: ["createdAt"] },
-      ],
-      tableName: "contact_messages",
-      timestamps: true,
+    fullName: {
+      index: true,
+      maxlength: [120, "Full name must be 120 characters or fewer."],
+      minlength: [2, "Full name must be at least 2 characters."],
+      required: [true, "Full name is required."],
+      trim: true,
+      type: String,
     },
-  );
-}
+    message: {
+      maxlength: [3000, "Message must be 3000 characters or fewer."],
+      minlength: [10, "Message must be at least 10 characters."],
+      required: [true, "Message is required."],
+      trim: true,
+      type: String,
+    },
+    phone: {
+      default: null,
+      maxlength: [40, "Phone number must be 40 characters or fewer."],
+      trim: true,
+      type: String,
+    },
+    status: {
+      default: "unread",
+      enum: contactStatuses,
+      index: true,
+      required: true,
+      type: String,
+    },
+    subject: {
+      default: "Website inquiry",
+      maxlength: [180, "Subject must be 180 characters or fewer."],
+      required: [true, "Subject is required."],
+      trim: true,
+      type: String,
+    },
+    updatedBy: {
+      default: null,
+      ref: "Admin",
+      set: optionalObjectId,
+      type: Schema.Types.ObjectId,
+    },
+    userId: {
+      default: null,
+      index: true,
+      type: String,
+    },
+  },
+  {
+    collection: "contact_messages",
+    timestamps: true,
+  },
+);
+
+contactMessageSchema.index({ status: 1, createdAt: -1 });
+contactMessageSchema.index({ email: 1, createdAt: -1 });
+contactMessageSchema.index({ userId: 1, createdAt: -1 });
+contactMessageSchema.index({ createdBy: 1, createdAt: -1 });
+contactMessageSchema.index({ fullName: "text", email: "text", subject: "text" });
+
+configureMongoSchema(contactMessageSchema);
+
+const ContactMessage = mongoose.models.ContactMessage || mongoose.model("ContactMessage", contactMessageSchema);
+
+export default ContactMessage;

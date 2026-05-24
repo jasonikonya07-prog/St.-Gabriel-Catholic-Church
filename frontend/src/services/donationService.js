@@ -1,5 +1,9 @@
 import { adminDelete, adminGet, adminPatch, publicGet, userPost } from "../api/axios";
 
+function withDataFields(response) {
+  return response?.data && typeof response.data === "object" ? { ...response, ...response.data } : response;
+}
+
 function normalizeDonationPayload(payload) {
   return {
     amount: Number(payload.amount),
@@ -15,7 +19,7 @@ function normalizeDonationPayload(payload) {
 }
 
 export function createDonation(payload) {
-  return userPost("/donations", normalizeDonationPayload(payload));
+  return userPost("/donations", normalizeDonationPayload(payload)).then(withDataFields);
 }
 
 export function sendMpesaPrompt(payload) {
@@ -28,31 +32,31 @@ export function sendMpesaPrompt(payload) {
     phone: payload.phone,
     purpose: payload.purpose || payload.givingType,
     transactionCode: payload.transactionCode || undefined,
-  });
+  }).then(withDataFields);
 }
 
 export function getMpesaPaymentStatus(checkoutRequestId) {
-  return publicGet(`/donations/mpesa/status/${checkoutRequestId}`);
+  return publicGet(`/donations/mpesa/status/${checkoutRequestId}`).then(withDataFields);
 }
 
 export function verifyDonation(transactionCode) {
-  return publicGet(`/donations/verify/${transactionCode}`);
+  return publicGet(`/donations/verify/${transactionCode}`).then(withDataFields);
 }
 
 export function getDonations(params = {}) {
-  return adminGet("/donations", { params });
+  return adminGet("/donations", { params }).then(withDataFields);
 }
 
 export function getDonation(id) {
-  return adminGet(`/donations/${id}`);
+  return adminGet(`/donations/${id}`).then(withDataFields);
 }
 
 export function getDonationStats() {
-  return adminGet("/donations/stats");
+  return adminGet("/donations/stats").then(withDataFields);
 }
 
 export function updateDonationStatus(id, payload) {
-  return adminPatch(`/donations/${id}/status`, typeof payload === "string" ? { status: payload } : payload);
+  return adminPatch(`/donations/${id}/status`, typeof payload === "string" ? { status: payload } : payload).then(withDataFields);
 }
 
 export function deleteDonation(id) {

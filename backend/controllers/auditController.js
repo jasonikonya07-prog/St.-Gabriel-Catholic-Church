@@ -1,25 +1,30 @@
-import { Op } from "sequelize";
 import ApiError from "../utils/ApiError.js";
-import { AuditLog, SecurityEvent } from "../models/index.js";
+import AuditLog, { actorTypes } from "../models/AuditLog.js";
+import SecurityEvent, { securityActorTypes, securitySeverities } from "../models/SecurityEvent.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getPagination } from "../utils/pagination.js";
 import { logAudit } from "../utils/securityLogger.js";
 
-const actorTypes = new Set(["admin", "user", "system", "public"]);
-const severities = new Set(["low", "medium", "high", "critical"]);
+const auditActorTypes = new Set(actorTypes);
+const eventActorTypes = new Set(securityActorTypes);
+const severities = new Set(securitySeverities);
 
 function cleanString(value, maxLength = 160) {
   return String(value || "").trim().slice(0, maxLength);
 }
 
-function parseNumericId(value, label) {
-  const id = cleanString(value, 30);
-  if (!/^\d+$/.test(id)) throw new ApiError(400, `${label} id is invalid.`);
-  return id;
+function escapeRegExp(value) {
+  return cleanString(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function like(value) {
-  return { [Op.like]: `%${cleanString(value)}%` };
+function regex(value) {
+  return new RegExp(escapeRegExp(value), "i");
+}
+
+function parseRecordId(value, label) {
+  const id = cleanString(value, 120);
+  if (!id) throw new ApiError(400, `${label} id is invalid.`);
+  return id;
 }
 
 function paginationMeta(count, limit, page) {
@@ -34,7 +39,7 @@ function paginationMeta(count, limit, page) {
 function parseAuditLog(row) {
   const data = row.toJSON ? row.toJSON() : row;
 
-  if (!data.metadata) return data;
+  if (!data.metadata || typeof data.metadata !== "string") return data;
 
   try {
     return {
@@ -46,78 +51,85 @@ function parseAuditLog(row) {
   }
 }
 
-function buildAuditLogWhere(query) {
+function buildAuditLogFilter(query) {
   const search = cleanString(query.search || query.query);
   const action = cleanString(query.action);
   const module = cleanString(query.module);
   const email = cleanString(query.email);
   const ipAddress = cleanString(query.ip || query.ipAddress, 64);
   const actorType = cleanString(query.actorType, 40).toLowerCase();
-  const where = {};
+  const filter = {};
 
-  if (action) where.action = like(action);
-  if (module) where.module = like(module);
-  if (email) where.actorEmail = like(email.toLowerCase());
-  if (ipAddress) where.ipAddress = like(ipAddress);
+  if (action) filter.action = regex(action);
+  if (module && module !== "all") filter.module = regex(module);
+  if (email) filter.actorEmail = regex(email.toLowerCase());
+  if (ipAddress) filter.ipAddress = regex(ipAddress);
 
   if (actorType && actorType !== "all") {
-    if (!actorTypes.has(actorType)) throw new ApiError(400, "Invalid actor type filter.");
-    where.actorType = actorType;
+    if (!auditActorTypes.has(actorType)) throw new ApiError(400, "Invalid actor type filter.");
+    filter.actorType = actorType;
   }
 
   if (search) {
-    where[Op.or] = [
-      { action: like(search) },
-      { module: like(search) },
-      { actorEmail: like(search.toLowerCase()) },
-      { ipAddress: like(search) },
-      { description: like(search) },
-      { entity: like(search) },
-      { entityId: like(search) },
+    filter.$or = [
+      { action: regex(search) },
+      { module: regex(search) },
+      { actorEmail: regex(search.toLowerCase()) },
+      { ipAddress: regex(search) },
+      { description: regex(search) },
+      { entity: regex(search) },
+      { entityId: regex(search) },
     ];
   }
 
-  return where;
+  return filter;
 }
 
-function buildSecurityEventWhere(query) {
+function buildSecurityEventFilter(query) {
   const search = cleanString(query.search || query.query);
-  const eventType = cleanString(query.eventType || query.action);
+  const action = cleanString(query.action || query.eventType);
+  const module = cleanString(query.module);
   const email = cleanString(query.email);
   const ipAddress = cleanString(query.ip || query.ipAddress, 64);
   const severity = cleanString(query.severity, 40).toLowerCase();
-  const where = {};
+  const actorType = cleanString(query.actorType, 40).toLowerCase();
+  const filter = {};
 
-  if (eventType) where.eventType = like(eventType);
-  if (email) where.email = like(email.toLowerCase());
-  if (ipAddress) where.ipAddress = like(ipAddress);
+  if (action) filter.eventType = regex(action);
+  if (module && module !== "all") filter.module = regex(module);
+  if (email) filter.email = regex(email.toLowerCase());
+  if (ipAddress) filter.ipAddress = regex(ipAddress);
 
   if (severity && severity !== "all") {
     if (!severities.has(severity)) throw new ApiError(400, "Invalid severity filter.");
-    where.severity = severity;
+    filter.severity = severity;
+  }
+
+  if (actorType && actorType !== "all") {
+    if (!eventActorTypes.has(actorType)) throw new ApiError(400, "Invalid actor type filter.");
+    filter.actorType = actorType;
   }
 
   if (search) {
-    where[Op.or] = [
-      { eventType: like(search) },
-      { email: like(search.toLowerCase()) },
-      { ipAddress: like(search) },
-      { userAgent: like(search) },
+    filter.$or = [
+      { eventType: regex(search) },
+      { module: regex(search) },
+      { email: regex(search.toLowerCase()) },
+      { ipAddress: regex(search) },
+      { userAgent: regex(search) },
     ];
   }
 
-  return where;
+  return filter;
 }
 
 export const listAuditLogs = asyncHandler(async (request, response) => {
   const { limit, offset, page } = getPagination(request.query);
-  const where = buildAuditLogWhere(request.query);
-  const { count, rows } = await AuditLog.findAndCountAll({
-    limit,
-    offset,
-    order: [["createdAt", "DESC"]],
-    where,
-  });
+  const filter = buildAuditLogFilter(request.query);
+  const [count, rows] = await Promise.all([
+    AuditLog.countDocuments(filter),
+    AuditLog.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit),
+  ]);
   const auditLogs = rows.map(parseAuditLog);
   const pagination = paginationMeta(count, limit, page);
 
@@ -131,45 +143,42 @@ export const listAuditLogs = asyncHandler(async (request, response) => {
 
 export const listSecurityEvents = asyncHandler(async (request, response) => {
   const { limit, offset, page } = getPagination(request.query);
-  const where = buildSecurityEventWhere(request.query);
-  const { count, rows } = await SecurityEvent.findAndCountAll({
-    limit,
-    offset,
-    order: [["createdAt", "DESC"]],
-    where,
-  });
+  const filter = buildSecurityEventFilter(request.query);
+  const [count, securityEvents] = await Promise.all([
+    SecurityEvent.countDocuments(filter),
+    SecurityEvent.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit),
+  ]);
   const pagination = paginationMeta(count, limit, page);
 
   response.json({
-    data: { pagination, securityEvents: rows },
+    data: { pagination, securityEvents },
     pagination,
-    securityEvents: rows,
+    securityEvents,
     success: true,
   });
 });
 
 export const deleteAuditLog = asyncHandler(async (request, response) => {
-  const id = parseNumericId(request.params.id, "Audit log");
-  const auditLog = await AuditLog.findByPk(id);
+  const id = parseRecordId(request.params.id, "Audit log");
+  const auditLog = await AuditLog.findOneAndDelete({ id });
 
   if (!auditLog) throw new ApiError(404, "Audit log not found.");
 
-  const deletedLog = {
-    action: auditLog.action,
-    actorEmail: auditLog.actorEmail,
-    actorType: auditLog.actorType,
-    id: auditLog.id,
-    module: auditLog.module,
-  };
-
-  await auditLog.destroy();
   await logAudit({
     action: "audit_log.deleted",
     actorEmail: request.admin?.email,
     actorId: request.admin?.id,
     actorType: "admin",
     description: "Super admin deleted an audit log.",
-    details: { deletedLog },
+    details: {
+      deletedLog: {
+        action: auditLog.action,
+        actorEmail: auditLog.actorEmail,
+        actorType: auditLog.actorType,
+        id: auditLog.id,
+        module: auditLog.module,
+      },
+    },
     entity: "audit_logs",
     entityId: id,
     module: "audit",
@@ -185,26 +194,25 @@ export const deleteAuditLog = asyncHandler(async (request, response) => {
 });
 
 export const deleteSecurityEvent = asyncHandler(async (request, response) => {
-  const id = parseNumericId(request.params.id, "Security event");
-  const securityEvent = await SecurityEvent.findByPk(id);
+  const id = parseRecordId(request.params.id, "Security event");
+  const securityEvent = await SecurityEvent.findOneAndDelete({ id });
 
   if (!securityEvent) throw new ApiError(404, "Security event not found.");
 
-  const deletedEvent = {
-    email: securityEvent.email,
-    eventType: securityEvent.eventType,
-    id: securityEvent.id,
-    severity: securityEvent.severity,
-  };
-
-  await securityEvent.destroy();
   await logAudit({
     action: "security_event.deleted",
     actorEmail: request.admin?.email,
     actorId: request.admin?.id,
     actorType: "admin",
     description: "Super admin deleted a security event.",
-    details: { deletedEvent },
+    details: {
+      deletedEvent: {
+        email: securityEvent.email,
+        eventType: securityEvent.eventType,
+        id: securityEvent.id,
+        severity: securityEvent.severity,
+      },
+    },
     entity: "security_events",
     entityId: id,
     module: "audit",

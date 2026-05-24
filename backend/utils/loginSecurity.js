@@ -1,7 +1,9 @@
 import ApiError from "./ApiError.js";
+import { FailedLoginAttempt } from "../models/index.js";
+import { getClientIp, getUserAgent } from "./securityLogger.js";
 
-const maxFailedLoginAttempts = Number(process.env.LOGIN_SECURITY_MAX_FAILED_ATTEMPTS || 5);
-const lockMinutes = Number(process.env.LOGIN_SECURITY_LOCK_MINUTES || 15);
+const maxFailedLoginAttempts = 5;
+const lockMinutes = 15;
 
 function getLockUntil() {
   return new Date(Date.now() + lockMinutes * 60 * 1000);
@@ -26,9 +28,25 @@ export async function checkAccountLocked(account) {
 
   account.failedLoginAttempts = 0;
   account.lockUntil = null;
-  await account.save({ fields: ["failedLoginAttempts", "lockUntil"] });
+  await account.save();
 
   return { locked: false };
+}
+
+export async function logFailedLoginAttempt({ email, reason, request = null, scope }) {
+  if (!email || !scope) return;
+
+  try {
+    await FailedLoginAttempt.create({
+      email: String(email).trim().toLowerCase(),
+      ipAddress: getClientIp(request) || null,
+      reason,
+      scope,
+      userAgent: getUserAgent(request) || null,
+    });
+  } catch (error) {
+    console.error("Failed login attempt write failed:", error.message);
+  }
 }
 
 export async function recordFailedLogin(account) {
@@ -45,7 +63,7 @@ export async function recordFailedLogin(account) {
 
   account.failedLoginAttempts = failedLoginAttempts;
   account.lockUntil = shouldLock ? getLockUntil() : null;
-  await account.save({ fields: ["failedLoginAttempts", "lockUntil"] });
+  await account.save();
 
   return {
     attempts: failedLoginAttempts,
@@ -60,7 +78,7 @@ export async function resetFailedLogin(account) {
 
   account.failedLoginAttempts = 0;
   account.lockUntil = null;
-  await account.save({ fields: ["failedLoginAttempts", "lockUntil"] });
+  await account.save();
 }
 
 export function throwLockedAccount(lockState) {

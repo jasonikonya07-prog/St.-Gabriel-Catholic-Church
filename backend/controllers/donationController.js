@@ -1,17 +1,16 @@
-import { col, fn, Op } from "sequelize";
 import ApiError from "../utils/ApiError.js";
-import { Donation } from "../models/index.js";
+import Donation, { donationPurposes, donationStatuses, paymentMethods } from "../models/Donation.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getPagination } from "../utils/pagination.js";
 import { logAudit } from "../utils/securityLogger.js";
 import { sendDonationConfirmationEmail } from "../utils/sendEmail.js";
 
-const donationPurposes = ["Tithe", "Church Development", "Charity", "Youth Ministry", "Mass Offering", "Other"];
-const paymentMethods = ["M-Pesa", "Card", "Bank Transfer"];
-const donationStatuses = ["pending", "completed", "failed", "cancelled"];
-
 function cleanString(value) {
   return String(value || "").trim();
+}
+
+function escapeRegExp(value) {
+  return cleanString(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizePurpose(value) {
@@ -39,7 +38,7 @@ function normalizePaymentMethod(value) {
 }
 
 function normalizeStatus(value, fallback = "pending") {
-  const status = cleanString(value || fallback).toLowerCase();
+  const text = cleanString(value || fallback);
   const statusAliases = {
     Cancelled: "cancelled",
     Completed: "completed",
@@ -47,7 +46,7 @@ function normalizeStatus(value, fallback = "pending") {
     Pending: "pending",
   };
 
-  return statusAliases[value] || status;
+  return statusAliases[text] || text.toLowerCase();
 }
 
 function validateEmail(email) {
@@ -61,29 +60,25 @@ function makeTransactionCode() {
 }
 
 async function makeUniqueTransactionCode(providedCode = "", ignoreId = null) {
-  let transactionCode = cleanString(providedCode).toUpperCase();
-
-  if (!transactionCode) {
-    transactionCode = makeTransactionCode();
-  }
-
-  let candidate = transactionCode;
+  const base = cleanString(providedCode).toUpperCase() || makeTransactionCode();
+  let candidate = base;
   let counter = 2;
+  const idFilter = ignoreId ? { id: { $ne: String(ignoreId) } } : {};
 
-  while (await Donation.findOne({ where: ignoreId ? { id: { [Op.ne]: ignoreId }, transactionCode: candidate } : { transactionCode: candidate } })) {
-    candidate = `${transactionCode}-${counter}`;
+  while (await Donation.exists({ ...idFilter, transactionCode: candidate })) {
+    candidate = `${base}-${counter}`;
     counter += 1;
   }
 
   return candidate;
 }
 
-function buildDonationPayload(body) {
+function buildDonationPayload(body, { allowStatus = false } = {}) {
   const amount = Number(body.amount);
   const email = cleanString(body.email).toLowerCase() || null;
   const paymentMethod = normalizePaymentMethod(body.paymentMethod);
   const purpose = normalizePurpose(body.purpose);
-  const status = normalizeStatus(body.status, "pending");
+  const status = allowStatus ? normalizeStatus(body.status, "pending") : "pending";
 
   if (!cleanString(body.donorName)) throw new ApiError(400, "Donor name is required.");
   if (!cleanString(body.phone)) throw new ApiError(400, "Phone number is required.");
@@ -108,37 +103,51 @@ function buildDonationPayload(body) {
   };
 }
 
-function buildListWhere(request) {
-  const search = cleanString(request.query.search || request.query.query);
-  const status = normalizeStatus(request.query.status, "");
-  const purpose = normalizePurpose(request.query.purpose);
-  const paymentMethod = normalizePaymentMethod(request.query.paymentMethod);
-  const where = {};
+function buildDonationFilter(query) {
+  const search = cleanString(query.search || query.query);
+  const status = normalizeStatus(query.status, "");
+  const purpose = normalizePurpose(query.purpose);
+  const paymentMethod = normalizePaymentMethod(query.paymentMethod);
+  const filter = {};
 
   if (status && status !== "all") {
     if (!donationStatuses.includes(status)) throw new ApiError(400, "Invalid donation status.");
-    where.status = status;
+    filter.status = status;
   }
 
   if (purpose && purpose !== "all") {
     if (!donationPurposes.includes(purpose)) throw new ApiError(400, "Invalid donation purpose.");
-    where.purpose = purpose;
+    filter.purpose = purpose;
   }
 
   if (paymentMethod && paymentMethod !== "all") {
     if (!paymentMethods.includes(paymentMethod)) throw new ApiError(400, "Invalid payment method.");
-    where.paymentMethod = paymentMethod;
+    filter.paymentMethod = paymentMethod;
   }
 
   if (search) {
-    where[Op.or] = [
-      { donorName: { [Op.like]: `%${search}%` } },
-      { phone: { [Op.like]: `%${search}%` } },
-      { transactionCode: { [Op.like]: `%${search}%` } },
-    ];
+    const regex = new RegExp(escapeRegExp(search), "i");
+    filter.$or = [{ donorName: regex }, { phone: regex }, { email: regex }, { transactionCode: regex }];
   }
 
-  return where;
+  return filter;
+}
+
+function paginationMeta(count, limit, page) {
+  return {
+    limit,
+    page,
+    pages: Math.max(Math.ceil(count / limit), 1),
+    total: count,
+  };
+}
+
+async function sendCompletedDonationEmail(donation, context) {
+  if (donation.status !== "completed") return;
+
+  sendDonationConfirmationEmail(donation).catch((error) => {
+    console.error(`${context} donation confirmation email failed:`, error.message);
+  });
 }
 
 export const createDonation = asyncHandler(async (request, response) => {
@@ -149,11 +158,7 @@ export const createDonation = asyncHandler(async (request, response) => {
     userId: request.user?.id || null,
   });
 
-  if (donation.status === "completed") {
-    sendDonationConfirmationEmail(donation).catch((error) => {
-      console.error("Donation confirmation email failed:", error.message);
-    });
-  }
+  await sendCompletedDonationEmail(donation, "Public");
 
   response.status(201).json({
     data: { donation },
@@ -165,7 +170,7 @@ export const createDonation = asyncHandler(async (request, response) => {
 
 export const verifyDonation = asyncHandler(async (request, response) => {
   const transactionCode = cleanString(request.params.transactionCode).toUpperCase();
-  const donation = await Donation.findOne({ where: { transactionCode } });
+  const donation = await Donation.findOne({ transactionCode });
 
   if (!donation) throw new ApiError(404, "Donation was not found for this transaction code.");
 
@@ -178,30 +183,23 @@ export const verifyDonation = asyncHandler(async (request, response) => {
 
 export const listDonations = asyncHandler(async (request, response) => {
   const { limit, offset, page } = getPagination(request.query);
-  const where = buildListWhere(request);
-  const { count, rows } = await Donation.findAndCountAll({
-    limit,
-    offset,
-    order: [["createdAt", "DESC"]],
-    where,
-  });
-  const pagination = {
-    limit,
-    page,
-    pages: Math.max(Math.ceil(count / limit), 1),
-    total: count,
-  };
+  const filter = buildDonationFilter(request.query);
+  const [count, donations] = await Promise.all([
+    Donation.countDocuments(filter),
+    Donation.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit),
+  ]);
+  const pagination = paginationMeta(count, limit, page);
 
   response.json({
-    data: { donations: rows, pagination },
-    donations: rows,
+    data: { donations, pagination },
+    donations,
     pagination,
     success: true,
   });
 });
 
 export const getDonation = asyncHandler(async (request, response) => {
-  const donation = await Donation.findByPk(request.params.id);
+  const donation = await Donation.findOne({ id: String(request.params.id) });
   if (!donation) throw new ApiError(404, "Donation not found.");
 
   response.json({
@@ -212,11 +210,14 @@ export const getDonation = asyncHandler(async (request, response) => {
 });
 
 export const updateDonationStatus = asyncHandler(async (request, response) => {
-  const donation = await Donation.findByPk(request.params.id);
+  const donation = await Donation.findOne({ id: String(request.params.id) });
   if (!donation) throw new ApiError(404, "Donation not found.");
 
-  const wasCompleted = donation.status === "completed";
   const previousStatus = donation.status;
+  const previousTransactionCode = donation.transactionCode;
+  const previousCheckoutRequestId = donation.checkoutRequestId;
+  const previousMpesaReceiptNumber = donation.mpesaReceiptNumber;
+  const wasCompleted = previousStatus === "completed";
   const status = normalizeStatus(request.body.status, donation.status);
 
   if (!donationStatuses.includes(status)) throw new ApiError(400, "Invalid donation status.");
@@ -226,8 +227,13 @@ export const updateDonationStatus = asyncHandler(async (request, response) => {
     request.body.transactionCode === undefined
       ? donation.transactionCode
       : await makeUniqueTransactionCode(request.body.transactionCode, donation.id);
-  donation.checkoutRequestId = request.body.checkoutRequestId ?? donation.checkoutRequestId;
-  donation.mpesaReceiptNumber = request.body.mpesaReceiptNumber ?? request.body.mpesaReceipt ?? donation.mpesaReceiptNumber;
+  donation.checkoutRequestId =
+    request.body.checkoutRequestId === undefined ? donation.checkoutRequestId : cleanString(request.body.checkoutRequestId) || null;
+  donation.mpesaReceiptNumber =
+    request.body.mpesaReceiptNumber === undefined && request.body.mpesaReceipt === undefined
+      ? donation.mpesaReceiptNumber
+      : cleanString(request.body.mpesaReceiptNumber ?? request.body.mpesaReceipt) || null;
+  donation.updatedBy = request.admin?.id || null;
   await donation.save();
 
   await logAudit({
@@ -239,7 +245,12 @@ export const updateDonationStatus = asyncHandler(async (request, response) => {
     details: {
       donationId: donation.id,
       newStatus: donation.status,
+      previousCheckoutRequestId,
+      previousMpesaReceiptNumber,
       previousStatus,
+      previousTransactionCode,
+      checkoutRequestId: donation.checkoutRequestId,
+      mpesaReceiptNumber: donation.mpesaReceiptNumber,
       transactionCode: donation.transactionCode,
     },
     entity: "donation",
@@ -249,9 +260,7 @@ export const updateDonationStatus = asyncHandler(async (request, response) => {
   });
 
   if (!wasCompleted && donation.status === "completed") {
-    sendDonationConfirmationEmail(donation).catch((error) => {
-      console.error("Donation confirmation email failed:", error.message);
-    });
+    await sendCompletedDonationEmail(donation, "Admin");
   }
 
   response.json({
@@ -263,8 +272,29 @@ export const updateDonationStatus = asyncHandler(async (request, response) => {
 });
 
 export const deleteDonation = asyncHandler(async (request, response) => {
-  const deleted = await Donation.destroy({ where: { id: request.params.id } });
-  if (!deleted) throw new ApiError(404, "Donation not found.");
+  const donation = await Donation.findOneAndDelete({ id: String(request.params.id) });
+  if (!donation) throw new ApiError(404, "Donation not found.");
+
+  await logAudit({
+    action: "donation.deleted",
+    actorEmail: request.admin?.email,
+    actorId: request.admin?.id,
+    actorType: "admin",
+    description: "Admin deleted a donation.",
+    details: {
+      amount: donation.amount,
+      donationId: donation.id,
+      donorName: donation.donorName,
+      paymentMethod: donation.paymentMethod,
+      purpose: donation.purpose,
+      status: donation.status,
+      transactionCode: donation.transactionCode,
+    },
+    entity: "donation",
+    entityId: donation.id,
+    module: "donations",
+    request,
+  });
 
   response.json({
     data: { id: request.params.id },
@@ -275,40 +305,58 @@ export const deleteDonation = asyncHandler(async (request, response) => {
 });
 
 export const donationStats = asyncHandler(async (request, response) => {
-  const [totalAmount, completedAmount, pendingAmount, totalCount, completedCount, pendingCount, byPurpose] =
-    await Promise.all([
-      Donation.sum("amount"),
-      Donation.sum("amount", { where: { status: "completed" } }),
-      Donation.sum("amount", { where: { status: "pending" } }),
-      Donation.count(),
-      Donation.count({ where: { status: "completed" } }),
-      Donation.count({ where: { status: "pending" } }),
-      Donation.findAll({
-        attributes: ["purpose", [fn("SUM", col("amount")), "total"]],
-        group: ["purpose"],
-        raw: true,
-      }),
-    ]);
+  const [amounts, counts, byPurpose] = await Promise.all([
+    Donation.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+    ]),
+    Donation.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    Donation.aggregate([
+      {
+        $group: {
+          _id: "$purpose",
+          total: { $sum: "$amount" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          purpose: "$_id",
+          total: 1,
+        },
+      },
+      { $sort: { purpose: 1 } },
+    ]),
+  ]);
+
+  const amountByStatus = new Map(amounts.map((item) => [item._id, Number(item.totalAmount || 0)]));
+  const countByStatus = new Map(counts.map((item) => [item._id, Number(item.count || 0)]));
+  const totalAmount = amounts.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0);
+  const totalCount = counts.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const stats = {
+    byPurpose,
+    completedAmount: amountByStatus.get("completed") || 0,
+    completedCount: countByStatus.get("completed") || 0,
+    pendingAmount: amountByStatus.get("pending") || 0,
+    pendingCount: countByStatus.get("pending") || 0,
+    totalAmount,
+    totalCount,
+  };
 
   response.json({
-    data: {
-      byPurpose,
-      completedAmount: Number(completedAmount || 0),
-      completedCount,
-      pendingAmount: Number(pendingAmount || 0),
-      pendingCount,
-      totalAmount: Number(totalAmount || 0),
-      totalCount,
-    },
-    stats: {
-      byPurpose,
-      completedAmount: Number(completedAmount || 0),
-      completedCount,
-      pendingAmount: Number(pendingAmount || 0),
-      pendingCount,
-      totalAmount: Number(totalAmount || 0),
-      totalCount,
-    },
+    data: stats,
+    stats,
     success: true,
   });
 });

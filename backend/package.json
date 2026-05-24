@@ -3,15 +3,17 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Secure Express, MySQL, and Sequelize backend for St. Gabriel Catholic Church.",
+  "description": "Secure Express and MongoDB Atlas backend for St. Gabriel Church.",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
     "seed:admin": "node seeders/seedAdmin.js",
     "seed:settings": "node seeders/seedSettings.js",
-    "db:check": "node -e \"import('./config/database.js').then(async ({ testConnection }) => { await testConnection(); process.exit(0); }).catch((error) => { console.error(error); process.exit(1); })\"",
-    "db:migrate": "node scripts/runMigrations.js"
+    "db:check": "node -e \"import('./config/db.js').then(async ({ connectDB, disconnectDB }) => { await connectDB(); await disconnectDB(); process.exit(0); }).catch((error) => { console.error(error); process.exit(1); })\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -25,17 +27,16 @@
     "helmet": "^8.2.0",
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.2",
     "morgan": "^1.10.1",
-    "mysql2": "^3.22.3",
     "nanoid": "^5.1.11",
-    "nodemailer": "^6.10.1",
-    "sequelize": "^6.37.8",
+    "nodemailer": "^8.0.8",
     "slugify": "^1.6.9",
-    "xss": "^1.0.15"
+    "xss": "^1.0.15",
+    "xss-clean": "^0.1.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14",
-    "sequelize-cli": "^6.6.5"
+    "nodemon": "^3.1.14"
   },
   "keywords": [],
   "author": "",

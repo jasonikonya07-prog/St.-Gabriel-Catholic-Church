@@ -10,7 +10,7 @@ export const defaultSiteSettings = {
   bankName: "",
   buttonControls: {},
   buttons: [],
-  churchName: "St. Gabriel Catholic Church",
+  churchName: "St. Gabriel Church",
   email: "office@stgabrielparish.org",
   facebook: "",
   goldAccent: "#C9A227",
@@ -31,7 +31,7 @@ export const defaultSiteSettings = {
   maintenanceExpectedBack: null,
   maintenanceMessage: "We are making a few updates. Please check back soon.",
   maintenanceTitle: "Website temporarily unavailable",
-  metaDescription: "St. Gabriel Catholic Church is a welcoming Catholic parish community.",
+  metaDescription: "St. Gabriel Church is a welcoming Catholic parish community.",
   mpesaPaybill: "",
   officeHours: "Monday - Friday, 9:00 AM - 5:00 PM",
   phone: "",
@@ -41,7 +41,7 @@ export const defaultSiteSettings = {
   tagline: "Growing together in faith, worship, and service.",
   tiktok: "",
   tillNumber: "",
-  websiteTitle: "St. Gabriel Catholic Church",
+  websiteTitle: "St. Gabriel Church",
   whatsapp: "",
   youtube: "",
 };
@@ -64,16 +64,32 @@ function extractButtons(response) {
 }
 
 function normalizeSettings(rawSettings) {
-  const settings = { ...defaultSiteSettings, ...rawSettings };
-  const buttonControls = settings.buttonControls || {};
-  const buttons = settings.buttons || Object.values(buttonControls);
+  const maintenance = rawSettings?.maintenance || {};
+  const auth = rawSettings?.auth || {};
+  const settings = {
+    ...defaultSiteSettings,
+    ...rawSettings,
+    allowRegistration: rawSettings?.allowRegistration ?? auth.allowRegistration ?? defaultSiteSettings.allowRegistration,
+    allowUserLogin: rawSettings?.allowUserLogin ?? auth.allowUserLogin ?? defaultSiteSettings.allowUserLogin,
+    maintenanceExpectedBack:
+      rawSettings?.maintenanceExpectedBack ?? maintenance.maintenanceExpectedBack ?? maintenance.expectedBack ?? defaultSiteSettings.maintenanceExpectedBack,
+    maintenanceMessage:
+      rawSettings?.maintenanceMessage ?? maintenance.maintenanceMessage ?? maintenance.message ?? defaultSiteSettings.maintenanceMessage,
+    maintenanceMode: rawSettings?.maintenanceMode ?? maintenance.maintenanceMode ?? maintenance.enabled ?? defaultSiteSettings.maintenanceEnabled,
+    maintenanceTitle: rawSettings?.maintenanceTitle ?? maintenance.maintenanceTitle ?? maintenance.title ?? defaultSiteSettings.maintenanceTitle,
+  };
+  const listedButtons = Array.isArray(settings.buttons) ? settings.buttons : [];
+  const listedControls = Object.fromEntries(listedButtons.map((button) => [button.buttonKey, button]));
+  const buttonControls = {
+    ...listedControls,
+    ...(settings.buttonControls || {}),
+  };
+  const buttons = listedButtons.length ? listedButtons : Object.values(buttonControls);
 
   settings.buttons = buttons;
   settings.buttonControls = buttonControls;
 
-  if (Object.prototype.hasOwnProperty.call(settings, "maintenanceMode")) {
-    settings.maintenanceEnabled = Boolean(settings.maintenanceMode);
-  }
+  settings.maintenanceEnabled = Boolean(settings.maintenanceMode);
 
   for (const [buttonKey, settingKey] of Object.entries(buttonSettingMap)) {
     const control = buttonControls[buttonKey] || buttons.find((button) => button.buttonKey === buttonKey);
@@ -95,11 +111,7 @@ function dispatchSettingsUpdated(settings) {
 }
 
 export async function getSiteSettings() {
-  const [websiteResponse, publicResponse] = await Promise.all([publicGet("/settings"), publicGet("/settings/public")]);
-  return normalizeSettings({
-    ...extractSettings(websiteResponse),
-    ...extractSettings(publicResponse),
-  });
+  return getPublicSettings();
 }
 
 export async function getPublicSettings() {

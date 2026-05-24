@@ -1,6 +1,6 @@
 import ApiError from "../utils/ApiError.js";
 import { Admin, User } from "../models/index.js";
-import { verifyAccessToken } from "../utils/generateTokens.js";
+import { verifyAccessToken } from "../utils/generateToken.js";
 
 function getBearerToken(request) {
   const header = request.headers.authorization || "";
@@ -30,7 +30,7 @@ async function loadUserFromPayload(payload) {
     throw new ApiError(401, "Invalid user token.");
   }
 
-  const user = await User.findByPk(payload.id || payload.sub);
+  const user = await User.findOne({ id: String(payload.id || payload.sub) });
 
   if (!user) {
     throw new ApiError(401, "User session is no longer valid.");
@@ -48,11 +48,11 @@ async function loadAdminFromPayload(payload) {
     throw new ApiError(401, "Invalid access token.");
   }
 
-  if (payload.tokenType && payload.tokenType !== "admin") {
+  if (payload.tokenType !== "admin") {
     throw new ApiError(401, "Invalid admin token.");
   }
 
-  const admin = await Admin.findByPk(payload.id || payload.sub);
+  const admin = await Admin.findOne({ id: String(payload.id || payload.sub) });
 
   if (!admin) {
     throw new ApiError(401, "Admin session is no longer valid.");
@@ -127,7 +127,7 @@ export async function optionalAuth(request, response, next) {
 
     if (payload.tokenType === "user") {
       request.user = await loadUserFromPayload(payload);
-    } else if (!payload.tokenType || payload.tokenType === "admin") {
+    } else if (payload.tokenType === "admin") {
       request.admin = await loadAdminFromPayload(payload);
     }
 

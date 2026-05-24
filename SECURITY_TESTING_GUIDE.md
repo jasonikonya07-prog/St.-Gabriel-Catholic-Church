@@ -1,4 +1,4 @@
-# St. Gabriel Catholic Church Security Testing Guide
+# St. Gabriel Church Security Testing Guide
 
 This guide tests the local security system for the React/Vite frontend and Node/Express/MySQL backend.
 
