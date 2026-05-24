@@ -21,6 +21,7 @@ import prayerRoutes from "./routes/prayerRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import userAuthRoutes from "./routes/userAuthRoutes.js";
 import ApiError from "./utils/ApiError.js";
+import { getAllowedOrigins, isOriginAllowed } from "./utils/corsOrigins.js";
 import { auditAdminMutations } from "./middleware/auditMiddleware.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware.js";
@@ -44,32 +45,8 @@ function normalizeApiPrefix(value) {
   return prefix || "/api";
 }
 
-function normalizeOrigin(origin) {
-  const trimmed = String(origin || "").trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-
-  try {
-    return new URL(trimmed).origin;
-  } catch {
-    return trimmed;
-  }
-}
-
-function getAllowedOrigins() {
-  const configuredOrigins = String(process.env.CLIENT_URL || "")
-    .split(",")
-    .map(normalizeOrigin)
-    .filter(Boolean);
-
-  if (!isProduction) {
-    configuredOrigins.push("http://localhost:5173", "http://127.0.0.1:5173");
-  }
-
-  return [...new Set(configuredOrigins)];
-}
-
 function corsWhitelist() {
-  const allowedOrigins = new Set(getAllowedOrigins());
+  const allowedOrigins = getAllowedOrigins();
 
   return cors({
     allowedHeaders: ["Authorization", "Content-Type", "X-Requested-With", "X-Request-Id"],
@@ -77,7 +54,7 @@ function corsWhitelist() {
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     optionsSuccessStatus: 204,
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
+      if (isOriginAllowed(origin, allowedOrigins)) {
         callback(null, true);
         return;
       }

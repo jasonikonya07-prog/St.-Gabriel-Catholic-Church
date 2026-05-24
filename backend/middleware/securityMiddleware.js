@@ -7,9 +7,9 @@ import hpp from "hpp";
 import { suspiciousIpLogger } from "./suspiciousIpLogger.js";
 import { sanitizeBody } from "./validateMiddleware.js";
 import ApiError from "../utils/ApiError.js";
+import { getAllowedOrigins, isOriginAllowed } from "../utils/corsOrigins.js";
 import { getClientIp, logSecurityEvent } from "../utils/securityLogger.js";
 
-const DEFAULT_LOCAL_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
 const DEFAULT_BODY_LIMIT = "100kb";
 const suspiciousPatterns = [
   { label: "path_traversal", pattern: /(\.\.\/|\.\.\\|%2e%2e)/i },
@@ -26,31 +26,6 @@ export function parseTrustProxy(value = process.env.TRUST_PROXY) {
   return value;
 }
 
-function normalizeAllowedOrigin(origin) {
-  const trimmed = String(origin || "").trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-
-  try {
-    return new URL(trimmed).origin;
-  } catch {
-    return trimmed;
-  }
-}
-
-export function getAllowedOrigins() {
-  const configured = process.env.CORS_ORIGINS || process.env.CLIENT_URL || "";
-  const origins = configured
-    .split(",")
-    .map(normalizeAllowedOrigin)
-    .filter(Boolean);
-
-  if (!configured || process.env.NODE_ENV !== "production") {
-    origins.push(...DEFAULT_LOCAL_ORIGINS);
-  }
-
-  return [...new Set(origins)];
-}
-
 function getCookieSecret() {
   return process.env.COOKIE_SECRET || process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || undefined;
 }
@@ -63,15 +38,13 @@ export function helmetConfig() {
 }
 
 export function corsWhitelist(allowedOrigins = getAllowedOrigins()) {
-  const allowedOriginSet = new Set(allowedOrigins);
-
   return cors({
     allowedHeaders: ["Authorization", "Content-Type", "X-Requested-With", "X-Request-Id"],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     optionsSuccessStatus: 204,
     origin(origin, callback) {
-      if (!origin || allowedOriginSet.has(origin)) {
+      if (isOriginAllowed(origin, allowedOrigins)) {
         callback(null, true);
         return;
       }
