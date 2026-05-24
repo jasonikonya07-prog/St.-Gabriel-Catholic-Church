@@ -296,24 +296,17 @@ function applySerialization(schema, options = {}) {
 }
 
 function applyPasswordHashing(schema) {
-  schema.pre("save", async function hashPassword(next) {
-    try {
-      if (!this.isModified("password")) {
-        next();
-        return;
-      }
-
-      if (passwordHashRegex.test(String(this.password || ""))) {
-        next();
-        return;
-      }
-
-      const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
-      this.password = await bcrypt.hash(this.password, saltRounds);
-      next();
-    } catch (error) {
-      next(error);
+  schema.pre("save", async function hashPassword() {
+    if (!this.isModified("password")) {
+      return;
     }
+
+    if (passwordHashRegex.test(String(this.password || ""))) {
+      return;
+    }
+
+    const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
+    this.password = await bcrypt.hash(this.password, saltRounds);
   });
 
   schema.methods.comparePassword = function comparePassword(candidatePassword) {
@@ -503,24 +496,17 @@ export function createMongoModel(name, fields, options = {}) {
   }
 
   if (options.hashPassword) {
-    schema.pre("save", async function hashPassword(next) {
-      try {
-        if (!this.isModified("password")) {
-          next();
-          return;
-        }
-
-        if (passwordHashRegex.test(String(this.password || ""))) {
-          next();
-          return;
-        }
-
-        const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
-        this.password = await bcrypt.hash(this.password, saltRounds);
-        next();
-      } catch (error) {
-        next(error);
+    schema.pre("save", async function hashPassword() {
+      if (!this.isModified("password")) {
+        return;
       }
+
+      if (passwordHashRegex.test(String(this.password || ""))) {
+        return;
+      }
+
+      const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
+      this.password = await bcrypt.hash(this.password, saltRounds);
     });
 
     schema.methods.comparePassword = function comparePassword(candidatePassword) {
