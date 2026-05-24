@@ -2,7 +2,18 @@ import ApiError from "../utils/ApiError.js";
 import { SiteSetting } from "../models/index.js";
 import { verifyAccessToken } from "../utils/generateToken.js";
 
-const exemptPaths = new Set(["/api/admin-auth/login", "/api/admin-auth/me", "/api/admin-auth/logout", "/api/settings/public", "/api/health"]);
+const exemptPaths = new Set([
+  "/admin-auth/login",
+  "/admin-auth/me",
+  "/admin-auth/logout",
+  "/api/admin-auth/login",
+  "/api/admin-auth/me",
+  "/api/admin-auth/logout",
+  "/api/health",
+  "/api/settings/public",
+  "/health",
+  "/settings/public",
+]);
 
 function getBearerToken(request) {
   const header = request.headers.authorization || "";
@@ -11,9 +22,11 @@ function getBearerToken(request) {
 }
 
 function isExemptPath(path) {
-  if (exemptPaths.has(path)) return true;
-  if (path.startsWith("/api/admin-auth/")) return true;
-  if (path.startsWith("/api/settings/public/")) return true;
+  const normalizedPath = String(path || "").replace(/^\/api(?=\/|$)/, "") || "/";
+
+  if (exemptPaths.has(path) || exemptPaths.has(normalizedPath)) return true;
+  if (normalizedPath.startsWith("/admin-auth/")) return true;
+  if (normalizedPath.startsWith("/settings/public/")) return true;
   return false;
 }
 
@@ -51,7 +64,7 @@ async function getMaintenanceSettings() {
 
 export async function maintenanceMiddleware(request, response, next) {
   try {
-    if (request.method === "OPTIONS" || isExemptPath(request.path) || hasValidAdminToken(request)) {
+    if (request.method === "OPTIONS" || isExemptPath(request.originalUrl || request.path) || hasValidAdminToken(request)) {
       next();
       return;
     }

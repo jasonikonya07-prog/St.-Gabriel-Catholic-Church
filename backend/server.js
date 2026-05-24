@@ -33,6 +33,7 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const apiPrefix = normalizeApiPrefix(process.env.API_PREFIX);
+const apiMountPrefixes = getApiMountPrefixes(apiPrefix);
 const bodyLimit = process.env.REQUEST_BODY_LIMIT || "100kb";
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -43,6 +44,16 @@ function normalizeApiPrefix(value) {
     .replace(/\/+$/, "");
 
   return prefix || "/api";
+}
+
+function getApiMountPrefixes(prefix) {
+  return [...new Set([prefix, ""])];
+}
+
+function apiPath(prefix, path) {
+  if (!prefix) return path;
+  if (path === "/") return prefix;
+  return `${prefix}${path}`;
 }
 
 function corsWhitelist() {
@@ -112,16 +123,18 @@ app.use(express.urlencoded({ extended: false, limit: bodyLimit, parameterLimit: 
 app.use(sanitizeBody);
 
 app.use(globalLimiter);
-app.post(`${apiPrefix}/auth/login`, loginLimiter);
-app.post(`${apiPrefix}/admin-auth/login`, loginLimiter);
-app.post(`${apiPrefix}/user-auth/login`, loginLimiter);
-app.post(`${apiPrefix}/user-auth/register`, loginLimiter);
-app.post(`${apiPrefix}/contact`, publicFormLimiter);
-app.post(`${apiPrefix}/prayers`, publicFormLimiter);
-app.post(`${apiPrefix}/donations`, publicFormLimiter);
-app.post(`${apiPrefix}/donations/mpesa/stk-push`, mpesaLimiter);
-app.post(`${apiPrefix}/newsletter/subscribe`, publicFormLimiter);
-app.post(`${apiPrefix}/newsletter/unsubscribe`, publicFormLimiter);
+apiMountPrefixes.forEach((prefix) => {
+  app.post(apiPath(prefix, "/auth/login"), loginLimiter);
+  app.post(apiPath(prefix, "/admin-auth/login"), loginLimiter);
+  app.post(apiPath(prefix, "/user-auth/login"), loginLimiter);
+  app.post(apiPath(prefix, "/user-auth/register"), loginLimiter);
+  app.post(apiPath(prefix, "/contact"), publicFormLimiter);
+  app.post(apiPath(prefix, "/prayers"), publicFormLimiter);
+  app.post(apiPath(prefix, "/donations"), publicFormLimiter);
+  app.post(apiPath(prefix, "/donations/mpesa/stk-push"), mpesaLimiter);
+  app.post(apiPath(prefix, "/newsletter/subscribe"), publicFormLimiter);
+  app.post(apiPath(prefix, "/newsletter/unsubscribe"), publicFormLimiter);
+});
 
 app.use(
   morgan(isProduction ? ":id :remote-addr :method :url :status :res[content-length] - :response-time ms" : ":id :method :url :status :response-time ms"),
@@ -136,33 +149,33 @@ app.get("/", (request, response) => {
   });
 });
 
-app.get(`${apiPrefix}/health`, (request, response) => {
+function healthCheck(request, response) {
   response.json({
     service: "St. Gabriel Church API",
     status: "ok",
     success: true,
     timestamp: new Date().toISOString(),
   });
-});
+}
 
-app.use(apiPrefix, ensureDatabase);
+function mountApiRoutes(prefix) {
+  app.get(apiPath(prefix, "/health"), healthCheck);
+  app.use(apiPath(prefix, "/auth"), ensureDatabase, authRoutes);
+  app.use(apiPath(prefix, "/admin-auth"), ensureDatabase, adminAuthRoutes);
+  app.use(apiPath(prefix, "/user-auth"), ensureDatabase, maintenanceMiddleware, userAuthRoutes);
+  app.use(apiPath(prefix, "/contact"), ensureDatabase, maintenanceMiddleware, contactRoutes);
+  app.use(apiPath(prefix, "/prayers"), ensureDatabase, maintenanceMiddleware, prayerRoutes);
+  app.use(apiPath(prefix, "/donations"), ensureDatabase, maintenanceMiddleware, donationRoutes);
+  app.use(apiPath(prefix, "/announcements"), ensureDatabase, maintenanceMiddleware, announcementRoutes);
+  app.use(apiPath(prefix, "/events"), ensureDatabase, maintenanceMiddleware, eventRoutes);
+  app.use(apiPath(prefix, "/newsletter"), ensureDatabase, maintenanceMiddleware, newsletterRoutes);
+  app.use(apiPath(prefix, "/settings"), ensureDatabase, maintenanceMiddleware, settingsRoutes);
+  app.use(apiPath(prefix, "/dashboard"), ensureDatabase, maintenanceMiddleware, dashboardRoutes);
+  app.use(apiPath(prefix, "/audit-logs"), ensureDatabase, maintenanceMiddleware, auditLogRoutes);
+  app.use(apiPath(prefix, "/security-events"), ensureDatabase, maintenanceMiddleware, securityEventRoutes);
+}
 
-app.use(`${apiPrefix}/auth`, authRoutes);
-app.use(`${apiPrefix}/admin-auth`, adminAuthRoutes);
-
-app.use(maintenanceMiddleware);
-
-app.use(`${apiPrefix}/user-auth`, userAuthRoutes);
-app.use(`${apiPrefix}/contact`, contactRoutes);
-app.use(`${apiPrefix}/prayers`, prayerRoutes);
-app.use(`${apiPrefix}/donations`, donationRoutes);
-app.use(`${apiPrefix}/announcements`, announcementRoutes);
-app.use(`${apiPrefix}/events`, eventRoutes);
-app.use(`${apiPrefix}/newsletter`, newsletterRoutes);
-app.use(`${apiPrefix}/settings`, settingsRoutes);
-app.use(`${apiPrefix}/dashboard`, dashboardRoutes);
-app.use(`${apiPrefix}/audit-logs`, auditLogRoutes);
-app.use(`${apiPrefix}/security-events`, securityEventRoutes);
+apiMountPrefixes.forEach(mountApiRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
