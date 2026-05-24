@@ -9,6 +9,7 @@
   },
   "main": "server.js",
   "scripts": {
+    "build": "node --check server.js",
     "dev": "nodemon server.js",
     "start": "node server.js",
     "seed:admin": "node seeders/seedAdmin.js",
