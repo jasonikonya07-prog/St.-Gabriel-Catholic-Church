@@ -1,19 +1,20 @@
 import ApiError from "../utils/ApiError.js";
 import { SiteSetting } from "../models/index.js";
 import { verifyAccessToken } from "../utils/generateToken.js";
+import { getClientIp } from "../utils/requestMeta.js";
 
-const exemptPaths = new Set([
-  "/admin-auth/login",
-  "/admin-auth/me",
-  "/admin-auth/logout",
-  "/api/admin-auth/login",
-  "/api/admin-auth/me",
-  "/api/admin-auth/logout",
-  "/api/health",
-  "/api/settings/public",
+const publicExemptPaths = new Set([
   "/health",
   "/settings/public",
 ]);
+
+const adminRoutePrefixes = [
+  "/admin-auth",
+  "/admin-users",
+  "/audit-logs",
+  "/dashboard",
+  "/security-events",
+];
 
 function getBearerToken(request) {
   const header = request.headers.authorization || "";
@@ -21,11 +22,24 @@ function getBearerToken(request) {
   return scheme?.toLowerCase() === "bearer" ? token : "";
 }
 
-function isExemptPath(path) {
-  const normalizedPath = String(path || "").replace(/^\/api(?=\/|$)/, "") || "/";
+function cleanPath(path) {
+  const normalizedPath = String(path || "")
+    .split("?")[0]
+    .replace(/\/+$/, "")
+    .replace(/^\/api(?=\/|$)/, "");
 
-  if (exemptPaths.has(path) || exemptPaths.has(normalizedPath)) return true;
-  if (normalizedPath.startsWith("/admin-auth/")) return true;
+  return normalizedPath || "/";
+}
+
+function requestPath(request) {
+  const mountedPath = `${request.baseUrl || ""}${request.path || ""}`;
+  return cleanPath(request.originalUrl || mountedPath || request.url);
+}
+
+function isPublicExemptPath(request) {
+  const normalizedPath = requestPath(request);
+
+  if (publicExemptPaths.has(normalizedPath)) return true;
   if (normalizedPath.startsWith("/settings/public/")) return true;
   return false;
 }
@@ -40,6 +54,44 @@ function hasValidAdminToken(request) {
   } catch {
     return false;
   }
+}
+
+function isAdminControlPath(request) {
+  const path = requestPath(request);
+  const method = String(request.method || "GET").toUpperCase();
+
+  if (adminRoutePrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+    return true;
+  }
+
+  if (path === "/settings/admin") return true;
+  if (path === "/settings/maintenance" && method === "PATCH") return true;
+  if (path === "/settings/auth-options" && method === "PATCH") return true;
+  if (path.startsWith("/settings/buttons/") && method === "PATCH") return true;
+  if (path === "/settings" && method === "PATCH") return true;
+
+  return false;
+}
+
+function normalizeIp(ipAddress) {
+  return String(ipAddress || "")
+    .trim()
+    .replace(/^::ffff:/, "");
+}
+
+function maintenanceBypassIps() {
+  return String(process.env.MAINTENANCE_BYPASS_IPS || "")
+    .split(",")
+    .map(normalizeIp)
+    .filter(Boolean);
+}
+
+function isMaintenanceBypassIp(request) {
+  const clientIp = normalizeIp(getClientIp(request));
+  if (!clientIp) return false;
+
+  const allowedIps = maintenanceBypassIps();
+  return allowedIps.includes("*") || allowedIps.includes(clientIp);
 }
 
 async function getMaintenanceSettings() {
@@ -64,7 +116,13 @@ async function getMaintenanceSettings() {
 
 export async function maintenanceMiddleware(request, response, next) {
   try {
-    if (request.method === "OPTIONS" || isExemptPath(request.originalUrl || request.path) || hasValidAdminToken(request)) {
+    if (
+      request.method === "OPTIONS" ||
+      isPublicExemptPath(request) ||
+      isAdminControlPath(request) ||
+      hasValidAdminToken(request) ||
+      isMaintenanceBypassIp(request)
+    ) {
       next();
       return;
     }
@@ -80,6 +138,9 @@ export async function maintenanceMiddleware(request, response, next) {
       data: { maintenance },
       maintenance,
       message: maintenance.maintenanceMessage,
+      request: {
+        clientIp: normalizeIp(getClientIp(request)) || null,
+      },
       status: "maintenance",
       success: false,
     });

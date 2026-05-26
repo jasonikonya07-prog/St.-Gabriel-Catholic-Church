@@ -9,18 +9,19 @@ import {
   updateMaintenance,
   updateSettings,
 } from "../controllers/settingsController.js";
-import { authenticate } from "../middleware/authMiddleware.js";
+import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = Router();
+const manageSettings = authorize("super_admin", "admin");
 
 router.get("/public", getPublicSettings);
 router.get("/buttons", getButtonControls);
 router.get("/admin", authenticate, getAdminSettings);
-router.patch("/maintenance", authenticate, updateMaintenance);
-router.patch("/auth-options", authenticate, updateAuthOptions);
-router.patch("/buttons/:buttonKey", authenticate, updateButtonControl);
+router.patch("/maintenance", authenticate, manageSettings, updateMaintenance);
+router.patch("/auth-options", authenticate, manageSettings, updateAuthOptions);
+router.patch("/buttons/:buttonKey", authenticate, manageSettings, updateButtonControl);
 
 router.get("/", getSettings);
-router.patch("/", authenticate, updateSettings);
+router.patch("/", authenticate, manageSettings, updateSettings);
 
 export default router;

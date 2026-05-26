@@ -27,9 +27,48 @@ function connectionOptions() {
   };
 }
 
+function serverSelectionErrors(error) {
+  if (!error?.reason?.servers || typeof error.reason.servers[Symbol.iterator] !== "function") {
+    return [];
+  }
+
+  return [...error.reason.servers.entries()]
+    .map(([server, description]) => {
+      const serverError = description?.error;
+      if (!serverError?.message) return null;
+      return `${server}: ${serverError.name || "Error"}: ${serverError.message}`;
+    })
+    .filter(Boolean);
+}
+
+function hasCertificateVerificationError(error) {
+  const messages = [error?.message, ...serverSelectionErrors(error)].join(" ").toLowerCase();
+
+  return [
+    "unable to verify",
+    "unable_to_verify",
+    "self-signed certificate",
+    "certificate has expired",
+    "cert_has_expired",
+  ].some((text) => messages.includes(text));
+}
+
 function showDevelopmentHelp(error) {
+  const detailedErrors = serverSelectionErrors(error);
+
   console.error("MongoDB connection failed.");
   console.error(`Reason: ${error.message}`);
+
+  if (detailedErrors.length > 0) {
+    console.error("Server selection details:");
+    [...new Set(detailedErrors)].forEach((message) => console.error(`- ${message}`));
+  }
+
+  if (hasCertificateVerificationError(error)) {
+    console.error("TLS certificate verification failed before MongoDB authentication.");
+    console.error("Check antivirus HTTPS/Web Shield scanning, corporate proxy certificates, or NODE_EXTRA_CA_CERTS.");
+  }
+
   console.error("Check that:");
   console.error("- backend/.env has a valid MONGO_URI copied from MongoDB Atlas");
   console.error("- the URI uses a Database Access user, not your Atlas login account");

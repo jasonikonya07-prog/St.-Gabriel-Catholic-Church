@@ -7,6 +7,10 @@ function isMaintenanceEnabled(settings) {
   return Boolean(settings?.maintenanceMode || settings?.maintenanceEnabled);
 }
 
+function isAdminRoute(pathname) {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 function normalizeMaintenanceSettings(maintenance = {}) {
   return {
     maintenanceEnabled: Boolean(maintenance.maintenanceMode ?? maintenance.enabled),
@@ -30,7 +34,7 @@ function MaintenanceLoading() {
 
 function MaintenanceGuard({ children }) {
   const location = useLocation();
-  const isAdminPath = location.pathname.startsWith("/admin");
+  const isAdminPath = isAdminRoute(location.pathname);
   const [state, setState] = useState({
     isLoading: !isAdminPath,
     settings: defaultSiteSettings,

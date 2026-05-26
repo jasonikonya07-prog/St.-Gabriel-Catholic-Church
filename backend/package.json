@@ -14,6 +14,9 @@
     "start": "node server.js",
     "seed:admin": "node seeders/seedAdmin.js",
     "seed:settings": "node seeders/seedSettings.js",
+    "maintenance:off": "node scripts/maintenanceMode.js off",
+    "maintenance:on": "node scripts/maintenanceMode.js on",
+    "maintenance:status": "node scripts/maintenanceMode.js status",
     "db:check": "node -e \"import('./config/db.js').then(async ({ connectDB, disconnectDB }) => { await connectDB(); await disconnectDB(); process.exit(0); }).catch((error) => { console.error(error); process.exit(1); })\""
   },
   "dependencies": {
